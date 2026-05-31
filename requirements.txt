@@ -3,3 +3,5 @@ google-generativeai
 pillow
 duckduckgo-search
 firebase-admin
+
+python-telegram-bot
