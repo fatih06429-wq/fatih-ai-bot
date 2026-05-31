@@ -2,22 +2,25 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# --- RENDER KANDIRMA HİLESİ (DOSYANIN EN TEPESİNDE OLMALI!) ---
+# --- RENDER KANDIRMA HİLESİ (GÜNCELLENDİ VE SESSİZE ALINDI) ---
 class SahteSunucu(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Bot ayakta!")
+    # Bu kısmı ekliyoruz ki Render ara sıra kapıyı tıklattığında loglar çöp olmasın
+    def log_message(self, format, *args):
+        pass 
 
 def port_ac():
     port = int(os.environ.get("PORT", 8080))
     server = HTTPServer(('0.0.0.0', port), SahteSunucu)
     server.serve_forever()
 
-threading.Thread(target=port_ac, daemon=True).start()
-print("--- SAHTE PORT AÇILDI, RENDER SUSTURULDU ---", flush=True)
-
-print("--- ADIM 1: bot.py İLK SATIR ÇALIŞTI ---", flush=True)
+# Arka planda çalışması için Thread başlatıyoruz (Daemon=True sayesinde asıl kodu dondurmaz)
+sunucu_thread = threading.Thread(target=port_ac, daemon=True)
+sunucu_thread.start()
+print("--- SAHTE PORT ARKA PLANDA AÇILDI, RENDER SUSTURULDU ---", flush=True)
 
 import os
 from telegram import Update
@@ -30,8 +33,8 @@ print("--- AI.PY BAŞARIYLA YÜKLENDİ ---", flush=True)
 from db import save
 print("--- DB.PY BAŞARIYLA YÜKLENDİ ---", flush=True)
 
-from ses import sesi_metne_cevir
-print("--- SES.PY BAŞARIYLA YÜKLENDİ ---", flush=True)
+#from ses import sesi_metne_cevir
+#print("--- SES.PY BAŞARIYLA YÜKLENDİ ---", flush=True)
 
 print("ADIM 1 TAMAM: Tüm kütüphaneler yüklendi!", flush=True)
 
@@ -133,7 +136,7 @@ app = Application.builder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start_command))
 app.add_handler(CommandHandler("yardim", yardim_command))
 app.add_handler(CommandHandler("temizle", temizle_command))
-app.add_handler(MessageHandler(filters.VOICE, ses_al))
+#app.add_handler(MessageHandler(filters.VOICE, ses_al))
 
 # YENİ: Fotoğrafları (PHOTO) yakalayacak dinleyici eklendi
 app.add_handler(MessageHandler(filters.PHOTO, fotograf_al))
