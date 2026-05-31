@@ -8,6 +8,7 @@ from telegram.ext import Application, MessageHandler, CommandHandler, filters, C
 # --- FLASK WEB SUNUCUSU ---
 app = Flask(__name__)
 
+# YENİ TASARIM: YAZIYOR ANİMASYONU VE MARKDOWN (ZENGİN METİN) DESTEĞİ EKLENDİ
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -15,20 +16,43 @@ HTML_SAYFASI = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Yapay Zeka Asistanı</title>
+    <!-- Markdown Çevirici Kütüphane -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #ffffff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         h2 { color: #4CAF50; }
-        #chat-container { width: 100%; max-width: 700px; background-color: #1e1e1e; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); padding: 20px; display: flex; flex-direction: column; height: 70vh; }
-        #chat-box { flex: 1; overflow-y: auto; padding-right: 10px; display: flex; flex-direction: column; gap: 15px; }
-        .message { padding: 12px 16px; border-radius: 12px; max-width: 80%; line-height: 1.4; word-wrap: break-word; }
+        #chat-container { width: 100%; max-width: 800px; background-color: #1e1e1e; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); padding: 20px; display: flex; flex-direction: column; height: 75vh; }
+        #chat-box { flex: 1; overflow-y: auto; padding-right: 10px; display: flex; flex-direction: column; gap: 15px; scroll-behavior: smooth; }
+        .message { padding: 12px 16px; border-radius: 12px; max-width: 85%; line-height: 1.5; word-wrap: break-word; font-size: 15px; }
         .user-msg { background-color: #2196F3; align-self: flex-end; border-bottom-right-radius: 2px; }
         .bot-msg { background-color: #333333; align-self: flex-start; border-bottom-left-radius: 2px; }
+        
+        /* Markdown Özel Tasarımları (Kod blokları, listeler vs.) */
+        .bot-msg p { margin: 0 0 10px 0; }
+        .bot-msg p:last-child { margin: 0; }
+        .bot-msg code { background-color: #1a1a1a; padding: 3px 6px; border-radius: 5px; font-family: Consolas, monospace; color: #4CAF50; border: 1px solid #444; }
+        .bot-msg pre { background-color: #1a1a1a; padding: 12px; border-radius: 8px; overflow-x: auto; border: 1px solid #444; }
+        .bot-msg pre code { background-color: transparent; padding: 0; border: none; color: #e0e0e0; }
+        .bot-msg ul, .bot-msg ol { margin: 5px 0; padding-left: 20px; }
+        .bot-msg a { color: #64B5F6; text-decoration: none; }
+        .bot-msg a:hover { text-decoration: underline; }
+
+        /* Yazıyor... Animasyonu CSS'i */
+        .typing-indicator { display: flex; gap: 5px; padding: 5px; align-items: center; }
+        .dot { width: 8px; height: 8px; background-color: #bbb; border-radius: 50%; animation: blink 1.4s infinite both; }
+        .dot:nth-child(1) { animation-delay: -0.32s; }
+        .dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+
         #input-area { display: flex; gap: 10px; margin-top: 20px; }
-        input[type="text"] { flex: 1; padding: 15px; border-radius: 8px; border: 1px solid #444; background-color: #2d2d2d; color: white; font-size: 16px; outline: none; }
+        input[type="text"] { flex: 1; padding: 15px; border-radius: 8px; border: 1px solid #444; background-color: #2d2d2d; color: white; font-size: 16px; outline: none; transition: 0.3s; }
         input[type="text"]:focus { border-color: #4CAF50; }
+        input[type="text"]:disabled { background-color: #1a1a1a; color: #777; cursor: not-allowed; }
         button { padding: 15px 25px; border-radius: 8px; border: none; background-color: #4CAF50; color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         button:hover { background-color: #45a049; }
-        ::-webkit-scrollbar { width: 8px; }
+        button:disabled { background-color: #555; cursor: not-allowed; color: #aaa; }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #1e1e1e; }
         ::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
     </style>
@@ -40,32 +64,65 @@ HTML_SAYFASI = """
             <div class="message bot-msg"><b>Asistan:</b> Merhaba! Sana nasıl yardımcı olabilirim?</div>
         </div>
         <div id="input-area">
-            <input type="text" id="user-input" placeholder="Mesajını yaz..." onkeypress="if(event.key === 'Enter') mesajGonder()">
-            <button onclick="mesajGonder()">Gönder</button>
+            <input type="text" id="user-input" placeholder="Mesajını yaz..." onkeypress="if(event.key === 'Enter') mesajGonder()" autocomplete="off">
+            <button id="send-btn" onclick="mesajGonder()">Gönder</button>
         </div>
     </div>
+
     <script>
+        // Metin içindeki enter boşluklarını koru
+        marked.setOptions({ breaks: true });
+
         async function mesajGonder() {
             const inputElement = document.getElementById("user-input");
+            const sendBtn = document.getElementById("send-btn");
             const mesaj = inputElement.value.trim();
             if (!mesaj) return;
             
             const chatBox = document.getElementById("chat-box");
+            
+            // 1. Senin mesajını ekrana bas
             chatBox.innerHTML += `<div class="message user-msg"><b>Sen:</b> ${mesaj}</div>`;
             inputElement.value = "";
             chatBox.scrollTop = chatBox.scrollHeight;
 
+            // 2. Kutuyu kilitle ve "Yazıyor..." animasyonunu çıkar
+            inputElement.disabled = true;
+            sendBtn.disabled = true;
+            const typingId = "typing-" + Date.now();
+            chatBox.innerHTML += `
+                <div id="${typingId}" class="message bot-msg">
+                    <b>Asistan:</b>
+                    <div class="typing-indicator">
+                        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+                    </div>
+                </div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+
             try {
+                // 3. Yapay zekaya soruyu gönder
                 const response = await fetch("/api/sor", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ mesaj: mesaj })
                 });
                 const data = await response.json();
-                chatBox.innerHTML += `<div class="message bot-msg"><b>Asistan:</b> ${data.cevap}</div>`;
+                
+                // 4. Animasyonu sil
+                document.getElementById(typingId).remove();
+                
+                // 5. Gelen cevabı Markdown süzgecinden geçirip ekrana bas
+                const formatliCevap = marked.parse(data.cevap);
+                chatBox.innerHTML += `<div class="message bot-msg"><b>Asistan:</b> <br>${formatliCevap}</div>`;
             } catch (error) {
-                chatBox.innerHTML += `<div class="message bot-msg" style="color: red;"><b>Hata:</b> Bağlantı kurulamadı.</div>`;
+                document.getElementById(typingId).remove();
+                chatBox.innerHTML += `<div class="message bot-msg" style="color: #ff5252;"><b>Hata:</b> Bağlantı kurulamadı.</div>`;
             }
+            
+            // 6. Kilidi aç, imleci tekrar kutuya koy
+            inputElement.disabled = false;
+            sendBtn.disabled = false;
+            inputElement.focus();
             chatBox.scrollTop = chatBox.scrollHeight;
         }
     </script>
@@ -133,10 +190,8 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply)
     save(user_id, user_text, reply)
 
-# Telegram botunu başlatan asenkron fonksiyon
 def run_telegram_bot():
     print("🔥 TELEGRAM BOTU BAŞLATILIYOR...", flush=True)
-    # asyncio eventi kendi içinde yaratması için yeni bir loop oluşturuyoruz
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
@@ -149,14 +204,11 @@ def run_telegram_bot():
     
     app_telegram.run_polling(stop_signals=None)
 
-# Ana işlem mantığı: Telegram'ı Thread (arka plan) yapıp, Flask'ı Ana ekranda (Main) tutuyoruz.
 if __name__ == '__main__':
-    # Telegram'ı arka planda başlat
     telegram_thread = threading.Thread(target=run_telegram_bot, daemon=True)
     telegram_thread.start()
     print("--- TELEGRAM ARKA PLANDA ÇALIŞIYOR ---", flush=True)
 
-    # Render'ın port tarayıcısını doğrudan karşılamak için Flask'ı ana işlem olarak başlat
     port = int(os.environ.get("PORT", 10000))
     print(f"--- WEB SUNUCUSU {port} PORTUNDA DİNLENİYOR ---", flush=True)
     app.run(host="0.0.0.0", port=port, use_reloader=False)
