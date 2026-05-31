@@ -1,12 +1,20 @@
 print("--- ADIM 1: bot.py İLK SATIR ÇALIŞTI ---", flush=True)
+
+import os
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
-import os
+print("--- TELEGRAM VE OS BAŞARIYLA YÜKLENDİ ---", flush=True)
 
 from ai import ask_ai, hafizayi_temizle
+print("--- AI.PY BAŞARIYLA YÜKLENDİ ---", flush=True)
+
 from db import save
+print("--- DB.PY BAŞARIYLA YÜKLENDİ ---", flush=True)
+
 from ses import sesi_metne_cevir
-print("ADIM 1: Kütüphaneler yüklendi")
+print("--- SES.PY BAŞARIYLA YÜKLENDİ ---", flush=True)
+
+print("ADIM 1 TAMAM: Tüm kütüphaneler yüklendi!", flush=True)
 
 TOKEN = "8864490425:AAH8Xm4buW-DfeUgTkMYTKdPJ8mQNLx59q0"
 print("ADIM 2: Token alındı")
