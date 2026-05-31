@@ -1,5 +1,5 @@
 requests
-google-generativeai
+google-genai
 pillow
 duckduckgo-search
 firebase-admin

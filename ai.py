@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-import google.generativeai as genai
+from google import genai
 import PIL.Image
 from duckduckgo_search import DDGS
 import datetime
