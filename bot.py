@@ -1,3 +1,4 @@
+print("--- ADIM 1: bot.py İLK SATIR ÇALIŞTI ---", flush=True)
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 import os
@@ -9,6 +10,7 @@ print("ADIM 1: Kütüphaneler yüklendi")
 
 TOKEN = "8864490425:AAH8Xm4buW-DfeUgTkMYTKdPJ8mQNLx59q0"
 print("ADIM 2: Token alındı")
+print(f"--- ADIM 2: Token okundu ---", flush=True)
 
 print("🔥 BOT BAŞLADI")
 
@@ -98,6 +100,7 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply)
     save(user_id, user_text, reply)
 
+print("--- ADIM 3: Bot uygulaması başlatılıyor ---", flush=True)
 app = Application.builder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start_command))
