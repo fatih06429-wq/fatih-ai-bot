@@ -13,7 +13,7 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# TAM EKRAN (FULL-SCREEN) MODERN WEB ARAYÜZÜ + DOSYA YÜKLEME + SESLİ GİRİŞ
+# TAM EKRAN MODERN WEB ARAYÜZÜ + DOSYA + SES + MOD SEÇİMİ
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -54,8 +54,10 @@ HTML_SAYFASI = """
         
         .header { background-color: var(--chat-bg); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--bot-border); box-shadow: 0 4px 15px var(--header-shadow); z-index: 10; transition: 0.4s; }
         .header h2 { margin: 0; color: var(--accent); font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px;}
-        .theme-toggle { background: transparent; border: 1px solid var(--bot-border); color: var(--text-color); padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 16px; transition: 0.3s; }
-        .theme-toggle:hover { background: var(--bot-msg-bg); }
+        
+        .header-controls { display: flex; gap: 10px; }
+        .ui-select, .theme-toggle { background: var(--bg-color); border: 1px solid var(--bot-border); color: var(--text-color); padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 15px; transition: 0.3s; outline: none; }
+        .ui-select:hover, .theme-toggle:hover { background: var(--bot-msg-bg); border-color: var(--accent); }
 
         #chat-container { flex: 1; display: flex; flex-direction: column; width: 100%; overflow: hidden; }
         #chat-box { flex: 1; overflow-y: auto; padding: 40px 15%; display: flex; flex-direction: column; gap: 25px; scroll-behavior: smooth; }
@@ -103,12 +105,18 @@ HTML_SAYFASI = """
 <body>
     <div class="header">
         <h2>✨ Kerem AI</h2>
-        <button class="theme-toggle" onclick="temaDegistir()">☀️ Açık Mod</button>
+        <div class="header-controls">
+            <select id="ai-mode" class="ui-select" title="Yanıt Hızını Seç">
+                <option value="thinking">🧠 Düşünen Mod</option>
+                <option value="fast">⚡ Hızlı Mod</option>
+            </select>
+            <button class="theme-toggle" onclick="temaDegistir()">☀️ Açık Mod</button>
+        </div>
     </div>
     
     <div id="chat-container">
         <div id="chat-box">
-            <div class="message bot-msg"><b>Kerem:</b> Merhaba! Sana nasıl yardımcı olabilirim? Gelişmiş yeteneklerimle buradayım.</div>
+            <div class="message bot-msg"><b>Kerem:</b> Merhaba! Yanıt hızımı yukarıdan ayarlayabilirsin. Sana nasıl yardımcı olabilirim?</div>
         </div>
         
         <div id="input-area">
@@ -166,7 +174,7 @@ HTML_SAYFASI = """
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
-            recognition.lang = 'tr-TR'; // Türkçe dinleme
+            recognition.lang = 'tr-TR';
             recognition.continuous = false;
             recognition.interimResults = false;
 
@@ -177,7 +185,6 @@ HTML_SAYFASI = """
 
             recognition.onresult = function(event) {
                 const transcript = event.results[0][0].transcript;
-                // Mevcut metnin üstüne ekle veya boşsa direkt yaz
                 userInput.value = userInput.value ? userInput.value + " " + transcript : transcript;
             };
 
@@ -200,7 +207,6 @@ HTML_SAYFASI = """
             };
         } else {
             micBtn.style.display = "none";
-            console.log("Tarayıcınız ses tanımayı desteklemiyor.");
         }
 
         async function mesajGonder() {
@@ -208,6 +214,7 @@ HTML_SAYFASI = """
             const fileInput = document.getElementById("file-input");
             const chatBox = document.getElementById("chat-box");
             const sendBtn = document.getElementById("send-btn");
+            const aiMode = document.getElementById("ai-mode").value; // Seçilen modu al
             
             if (!input.value.trim() && fileInput.files.length === 0) return;
 
@@ -227,10 +234,14 @@ HTML_SAYFASI = """
             input.disabled = true;
             sendBtn.disabled = true;
             micBtn.disabled = true;
+            
+            // Moda göre bekleme yazısını ayarla
+            const waitingText = aiMode === "fast" ? "Hızla yanıtlıyor..." : "Kerem Düşünüyor...";
+            
             const typingId = "typing-" + Date.now();
             chatBox.innerHTML += `
                 <div id="${typingId}" class="message bot-msg">
-                    <div class="thinking"><div class="spinner"></div> Kerem Düşünüyor...</div>
+                    <div class="thinking"><div class="spinner"></div> ${waitingText}</div>
                 </div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
             
@@ -241,7 +252,14 @@ HTML_SAYFASI = """
                 const botMesajKutusu = document.getElementById(typingId);
                 botMesajKutusu.innerHTML = ""; 
                 
-                await daktiloEfekti(botMesajKutusu, data.cevap);
+                // Seçime göre cevabı ekrana bas
+                if (aiMode === "fast") {
+                    botMesajKutusu.innerHTML = marked.parse(data.cevap);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                } else {
+                    await daktiloEfekti(botMesajKutusu, data.cevap);
+                }
+                
             } catch (error) {
                 document.getElementById(typingId).innerHTML = `<span style="color: #ff5252;">Bağlantı hatası oluştu.</span>`;
             }
