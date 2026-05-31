@@ -8,7 +8,7 @@ from telegram.ext import Application, MessageHandler, CommandHandler, filters, C
 # --- FLASK WEB SUNUCUSU ---
 app = Flask(__name__)
 
-# YENİ TASARIM: YAZIYOR ANİMASYONU VE MARKDOWN (ZENGİN METİN) DESTEĞİ EKLENDİ
+# TAM EKRAN (FULL-SCREEN) MODERN WEB ARAYÜZÜ
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -16,49 +16,71 @@ HTML_SAYFASI = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Yapay Zeka Asistanı</title>
-    <!-- Markdown Çevirici Kütüphane -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #ffffff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        h2 { color: #4CAF50; }
-        #chat-container { width: 100%; max-width: 800px; background-color: #1e1e1e; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); padding: 20px; display: flex; flex-direction: column; height: 75vh; }
-        #chat-box { flex: 1; overflow-y: auto; padding-right: 10px; display: flex; flex-direction: column; gap: 15px; scroll-behavior: smooth; }
-        .message { padding: 12px 16px; border-radius: 12px; max-width: 85%; line-height: 1.5; word-wrap: break-word; font-size: 15px; }
-        .user-msg { background-color: #2196F3; align-self: flex-end; border-bottom-right-radius: 2px; }
-        .bot-msg { background-color: #333333; align-self: flex-start; border-bottom-left-radius: 2px; }
+        /* Genel Sayfa Ayarları (Tam Ekran) */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #ffffff; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* Markdown Özel Tasarımları (Kod blokları, listeler vs.) */
+        /* Üst Başlık Çubuğu */
+        .header { background-color: #1e1e1e; padding: 15px 20px; text-align: center; border-bottom: 1px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 10; }
+        .header h2 { margin: 0; color: #4CAF50; font-size: 22px; letter-spacing: 1px; }
+        
+        /* Ana Sohbet Konteyneri */
+        #chat-container { flex: 1; display: flex; flex-direction: column; background-color: #121212; width: 100%; overflow: hidden; }
+        
+        /* Mesajların Aktığı Ekran */
+        #chat-box { flex: 1; overflow-y: auto; padding: 30px 15%; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+        
+        /* Mesaj Balonları */
+        .message { padding: 15px 22px; border-radius: 12px; max-width: 80%; line-height: 1.6; word-wrap: break-word; font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .user-msg { background-color: #2196F3; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .bot-msg { background-color: #1e1e1e; align-self: flex-start; border-bottom-left-radius: 2px; border: 1px solid #2a2a2a; }
+        
+        /* Markdown Özel Tasarımları */
         .bot-msg p { margin: 0 0 10px 0; }
         .bot-msg p:last-child { margin: 0; }
-        .bot-msg code { background-color: #1a1a1a; padding: 3px 6px; border-radius: 5px; font-family: Consolas, monospace; color: #4CAF50; border: 1px solid #444; }
-        .bot-msg pre { background-color: #1a1a1a; padding: 12px; border-radius: 8px; overflow-x: auto; border: 1px solid #444; }
+        .bot-msg code { background-color: #000; padding: 4px 8px; border-radius: 6px; font-family: Consolas, monospace; color: #4CAF50; border: 1px solid #333; }
+        .bot-msg pre { background-color: #0a0a0a; padding: 15px; border-radius: 10px; overflow-x: auto; border: 1px solid #333; }
         .bot-msg pre code { background-color: transparent; padding: 0; border: none; color: #e0e0e0; }
-        .bot-msg ul, .bot-msg ol { margin: 5px 0; padding-left: 20px; }
+        .bot-msg ul, .bot-msg ol { margin: 10px 0; padding-left: 25px; }
         .bot-msg a { color: #64B5F6; text-decoration: none; }
         .bot-msg a:hover { text-decoration: underline; }
 
-        /* Yazıyor... Animasyonu CSS'i */
-        .typing-indicator { display: flex; gap: 5px; padding: 5px; align-items: center; }
-        .dot { width: 8px; height: 8px; background-color: #bbb; border-radius: 50%; animation: blink 1.4s infinite both; }
+        /* Yazıyor... Animasyonu */
+        .typing-indicator { display: flex; gap: 6px; padding: 5px; align-items: center; }
+        .dot { width: 8px; height: 8px; background-color: #888; border-radius: 50%; animation: blink 1.4s infinite both; }
         .dot:nth-child(1) { animation-delay: -0.32s; }
         .dot:nth-child(2) { animation-delay: -0.16s; }
         @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
 
-        #input-area { display: flex; gap: 10px; margin-top: 20px; }
-        input[type="text"] { flex: 1; padding: 15px; border-radius: 8px; border: 1px solid #444; background-color: #2d2d2d; color: white; font-size: 16px; outline: none; transition: 0.3s; }
-        input[type="text"]:focus { border-color: #4CAF50; }
+        /* Alt Bilgi Giriş Alanı */
+        #input-area { background-color: #1e1e1e; padding: 20px 15%; display: flex; gap: 15px; border-top: 1px solid #333; align-items: center; box-shadow: 0 -4px 15px rgba(0,0,0,0.3); z-index: 10; }
+        input[type="text"] { flex: 1; padding: 16px 25px; border-radius: 30px; border: 1px solid #444; background-color: #2d2d2d; color: white; font-size: 16px; outline: none; transition: 0.3s; }
+        input[type="text"]:focus { border-color: #4CAF50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.4); }
         input[type="text"]:disabled { background-color: #1a1a1a; color: #777; cursor: not-allowed; }
-        button { padding: 15px 25px; border-radius: 8px; border: none; background-color: #4CAF50; color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { background-color: #45a049; }
-        button:disabled { background-color: #555; cursor: not-allowed; color: #aaa; }
+        button { padding: 16px 35px; border-radius: 30px; border: none; background-color: #4CAF50; color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background-color: #45a049; transform: translateY(-2px); }
+        button:disabled { background-color: #555; cursor: not-allowed; transform: none; color: #aaa; }
         
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #1e1e1e; }
-        ::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        /* Kaydırma Çubuğu (Scrollbar) */
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: #121212; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* Mobil Cihazlar İçin Daralma (Responsive) */
+        @media (max-width: 768px) {
+            #chat-box { padding: 20px 5%; }
+            #input-area { padding: 15px 5%; }
+            .message { max-width: 90%; }
+        }
     </style>
 </head>
 <body>
-    <h2>🤖 Yapay Zeka Asistanı</h2>
+    <div class="header">
+        <h2>🤖 Yapay Zeka Asistanı</h2>
+    </div>
+    
     <div id="chat-container">
         <div id="chat-box">
             <div class="message bot-msg"><b>Asistan:</b> Merhaba! Sana nasıl yardımcı olabilirim?</div>
@@ -70,7 +92,6 @@ HTML_SAYFASI = """
     </div>
 
     <script>
-        // Metin içindeki enter boşluklarını koru
         marked.setOptions({ breaks: true });
 
         async function mesajGonder() {
@@ -81,12 +102,12 @@ HTML_SAYFASI = """
             
             const chatBox = document.getElementById("chat-box");
             
-            // 1. Senin mesajını ekrana bas
+            // Senin mesajını ekrana bas
             chatBox.innerHTML += `<div class="message user-msg"><b>Sen:</b> ${mesaj}</div>`;
             inputElement.value = "";
             chatBox.scrollTop = chatBox.scrollHeight;
 
-            // 2. Kutuyu kilitle ve "Yazıyor..." animasyonunu çıkar
+            // Kutuyu kilitle ve "Yazıyor..." animasyonunu çıkar
             inputElement.disabled = true;
             sendBtn.disabled = true;
             const typingId = "typing-" + Date.now();
@@ -100,7 +121,7 @@ HTML_SAYFASI = """
             chatBox.scrollTop = chatBox.scrollHeight;
 
             try {
-                // 3. Yapay zekaya soruyu gönder
+                // Yapay zekaya soruyu gönder
                 const response = await fetch("/api/sor", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -108,10 +129,10 @@ HTML_SAYFASI = """
                 });
                 const data = await response.json();
                 
-                // 4. Animasyonu sil
+                // Animasyonu sil
                 document.getElementById(typingId).remove();
                 
-                // 5. Gelen cevabı Markdown süzgecinden geçirip ekrana bas
+                // Gelen cevabı Markdown süzgecinden geçirip ekrana bas
                 const formatliCevap = marked.parse(data.cevap);
                 chatBox.innerHTML += `<div class="message bot-msg"><b>Asistan:</b> <br>${formatliCevap}</div>`;
             } catch (error) {
@@ -119,7 +140,7 @@ HTML_SAYFASI = """
                 chatBox.innerHTML += `<div class="message bot-msg" style="color: #ff5252;"><b>Hata:</b> Bağlantı kurulamadı.</div>`;
             }
             
-            // 6. Kilidi aç, imleci tekrar kutuya koy
+            // Kilidi aç, imleci tekrar kutuya koy
             inputElement.disabled = false;
             sendBtn.disabled = false;
             inputElement.focus();
