@@ -1,3 +1,5 @@
+import os
+import json
 import requests
 import google.generativeai as genai
 import PIL.Image
@@ -8,7 +10,13 @@ from firebase_admin import credentials, firestore
 
 # Firebase Başlatma
 try:
-    cred = credentials.Certificate("firebase_key.json")
+    # 1. Render'daki gizli değişkeni çek
+    firebase_json = os.environ.get("FIREBASE_JSON")
+    
+    # 2. O değişkeni JSON'a çevirip cred (kimlik) olarak ayarla
+    cred = credentials.Certificate(json.loads(firebase_json))
+    
+    # 3. Firebase'i bu kimlikle başlat
     firebase_admin.initialize_app(cred)
     db = firestore.client()
     print("✅ Firebase Veri Tabanı Bağlantısı Başarılı!")
