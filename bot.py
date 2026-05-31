@@ -5,8 +5,10 @@ import os
 from ai import ask_ai, hafizayi_temizle
 from db import save
 from ses import sesi_metne_cevir
+print("ADIM 1: Kütüphaneler yüklendi")
 
 TOKEN = "8864490425:AAH8Xm4buW-DfeUgTkMYTKdPJ8mQNLx59q0"
+print("ADIM 2: Token alındı")
 
 print("🔥 BOT BAŞLADI")
 
