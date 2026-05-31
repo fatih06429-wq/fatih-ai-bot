@@ -28,7 +28,7 @@ sohbet_gecmisi = {}
 
 # Gemini API
 api_key = os.environ.get("GOOGLE_API_KEY")
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=api_key)
 
 uygun_model = "gemini-2.0-flash" 
 try:
