@@ -23,7 +23,7 @@ sohbet_gecmisi = {}
 # Gemini API Başlatma
 api_key = os.environ.get("GOOGLE_API_KEY")
 client = genai.Client(api_key=api_key)
-uygun_model = "gemini-2.5-flash"
+uygun_model = "gemini-2.5-flash" 
 
 def arama_gerekli_mi(metin):
     guncel_kelimeler = ["hava", "maç", "skor", "haber", "dolar", "euro", "fiyat", "bugün", "tarih", "saat", "deprem"]
@@ -39,16 +39,19 @@ def internette_ara(sorgu):
 def ask_ai(text, user_id, image_path=None):
     bugun = datetime.datetime.now().strftime("%d %B %Y")
     
-    # Hafıza Yükleme
+    # HAFIZA YÜKLEME (Gemini'ın katı sırasına uygun şekilde: Kullanıcı -> Asistan)
     if user_id not in sohbet_gecmisi:
-        sohbet_gecmisi[user_id] = [{"role": "user", "parts": [{"text": f"Bugünün tarihi: {bugun}. Sen Fatih'in asistansın."}]}]
+        sohbet_gecmisi[user_id] = [
+            {"role": "user", "parts": [{"text": f"Sistem: Bugünün tarihi {bugun}. Sen Fatih'in asistansın. Her zaman Türkçe yaz."}]},
+            {"role": "model", "parts": [{"text": "Anladım, ben Fatih'in asistanıyım. Size nasıl yardımcı olabilirim?"}]}
+        ]
 
     # Arama
     arama_sonucu = internette_ara(text) if arama_gerekli_mi(text) else ""
     full_text = f"İnternet verileri: {arama_sonucu}\n\nSoru: {text}" if arama_sonucu else text
 
-    # Fotoğraf mı Metin mi?
     try:
+        # Fotoğraf mı Metin mi?
         if image_path:
             with PIL.Image.open(image_path) as img:
                 response = client.models.generate_content(model=uygun_model, contents=[img, full_text])
@@ -59,12 +62,15 @@ def ask_ai(text, user_id, image_path=None):
         cevap = response.text
         sohbet_gecmisi[user_id].append({"role": "model", "parts": [{"text": cevap}]})
         
-        # Firebase'e kaydet
+        # Firebase'e kaydet (Son 20 mesajı sakla ki sınır aşılmasın)
         if db:
-            db.collection("sohbetler").document(str(user_id)).set({"gecmis": sohbet_gecmisi[user_id]})
+            db.collection("sohbetler").document(str(user_id)).set({"gecmis": sohbet_gecmisi[user_id][-20:]})
         return cevap
         
     except Exception as e:
+        # Hata alırsak son eklediğimiz kullanıcı mesajını sil ki hafıza sırası bozulmasın
+        if sohbet_gecmisi[user_id] and sohbet_gecmisi[user_id][-1]["role"] == "user":
+            sohbet_gecmisi[user_id].pop()
         return f"Hata: {e}"
 
 def hafizayi_temizle(user_id):
