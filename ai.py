@@ -2,12 +2,16 @@ from google.genai import types
 import os
 import json
 import PIL.Image
-import fitz  # PDF okuma için (requirements.txt dosyana pymupdf eklemeyi unutma!)
+import fitz  
+import requests  # YENİ: Yerel model bağlantısı için
 from google import genai
 from duckduckgo_search import DDGS
 import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
+
+# --- AYARLAR ---
+NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate" # Senin tünel linkin
 
 # Firebase Başlatma
 try:
@@ -38,13 +42,24 @@ def internette_ara(sorgu):
             return "\n".join([f"- {s['title']}: {s['body']}" for s in sonuclar]) if sonuclar else ""
     except: return ""
 
+# YENİ: Yerel Model (Ollama) Fallback
+def fallback_ollama(mesaj):
+    try:
+        payload = {"model": "llama3", "prompt": mesaj, "stream": False}
+        response = requests.post(NGROK_LINK, json=payload, timeout=60)
+        if response.status_code == 200:
+            return f"*(Yerel Sistem Devrede)*\n\n{response.json().get('response', 'Yerel model cevap üretemedi.')}"
+        return "Yedek motor şu an ulaşılamaz durumda."
+    except Exception as e:
+        return f"Bağlantı hatası: {e}"
+
 def ask_ai(text, user_id, image_path=None):
     bugun = datetime.datetime.now().strftime("%d %B %Y")
     
     if user_id not in sohbet_gecmisi:
         sohbet_gecmisi[user_id] = [
-            {"role": "user", "parts": [{"text": f"Sistem: Bugünün tarihi {bugun}. Sen profesyonel, güvenilir ve tarafsız bir yapay zeka asistanısın. BİLMEDİĞİN ŞEYLERİ UYDURMA. Her zaman Türkçe yaz."}]},
-            {"role": "model", "parts": [{"text": "Anladım. Size sadece doğrulanmış bilgiler sunacağım. Bilmediğim konularda dürüstçe belirteceğim."}]}
+            {"role": "user", "parts": [{"text": f"Sistem: Bugünün tarihi {bugun}. Sen profesyonel, güvenilir bir asistansın. Türkçe yaz."}]},
+            {"role": "model", "parts": [{"text": "Anladım."}]}
         ]
 
     arama_sonucu = internette_ara(text) if arama_gerekli_mi(text) else ""
@@ -52,8 +67,6 @@ def ask_ai(text, user_id, image_path=None):
 
     try:
         model_contents = []
-        
-        # Dosya İşleme (PDF veya Resim)
         if image_path:
             if image_path.lower().endswith('.pdf'):
                 doc = fitz.open(image_path)
@@ -81,15 +94,14 @@ def ask_ai(text, user_id, image_path=None):
         return cevap
         
     except Exception as e:
-        # 429 Kota Aşımı Hatasını Kibarlaştırma
-        if "429" in str(e):
-            return "⏳ Şu an çok fazla istek alıyorum. Lütfen 30-40 saniye dinlenmeme izin verip tekrar dener misin?"
+        # HATA YAKALAMA VE YEREL MODELE GEÇİŞ
+        print(f"Hata oluştu, yedek sisteme geçiliyor: {e}")
         
-        # Hata durumunda hafızayı koruma
+        # Eğer hafızaya eklenmişse temizle
         if not image_path and sohbet_gecmisi.get(user_id) and sohbet_gecmisi[user_id][-1]["role"] == "user":
             sohbet_gecmisi[user_id].pop()
             
-        return f"Hata: {e}"
+        return fallback_ollama(text)
 
 def hafizayi_temizle(user_id):
     if user_id in sohbet_gecmisi: del sohbet_gecmisi[user_id]
