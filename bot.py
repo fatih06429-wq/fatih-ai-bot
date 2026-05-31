@@ -1,3 +1,12 @@
+import os
+import threading
+from flask import Flask, request, jsonify, render_template_string
+from telegram import Update
+from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
+
+# --- FLASK WEB SUNUCUSU ---
+app = Flask(__name__)
+
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
