@@ -1,19 +1,10 @@
-import os
-import threading
-from flask import Flask, request, jsonify, render_template_string
-from telegram import Update
-from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
-
-# --- FLASK WEB SUNUCUSU (SAHTE SUNUCU YERİNE GERÇEK WEB ARAYÜZÜ) ---
-app = Flask(__name__)
-
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fatih'in Yapay Zeka Asistanı</title>
+    <title>Yapay Zeka Asistanı</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #ffffff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         h2 { color: #4CAF50; }
@@ -33,10 +24,10 @@ HTML_SAYFASI = """
     </style>
 </head>
 <body>
-    <h2>🤖 Fatih'in Yapay Zeka Asistanı</h2>
+    <h2>🤖 Yapay Zeka Asistanı</h2>
     <div id="chat-container">
         <div id="chat-box">
-            <div class="message bot-msg"><b>Asistan:</b> Merhaba Fatih! Web arayüzüne hoş geldin. Ne konuşalım?</div>
+            <div class="message bot-msg"><b>Asistan:</b> Merhaba! Sana nasıl yardımcı olabilirim?</div>
         </div>
         <div id="input-area">
             <input type="text" id="user-input" placeholder="Mesajını yaz..." onkeypress="if(event.key === 'Enter') mesajGonder()">

@@ -42,8 +42,8 @@ def ask_ai(text, user_id, image_path=None):
     # HAFIZA YÜKLEME (Gemini'ın katı sırasına uygun şekilde: Kullanıcı -> Asistan)
     if user_id not in sohbet_gecmisi:
         sohbet_gecmisi[user_id] = [
-            {"role": "user", "parts": [{"text": f"Sistem: Bugünün tarihi {bugun}. Sen Fatih'in asistansın. Her zaman Türkçe yaz."}]},
-            {"role": "model", "parts": [{"text": "Anladım, ben Fatih'in asistanıyım. Size nasıl yardımcı olabilirim?"}]}
+            {"role": "user", "parts": [{"text": f"Sistem: Bugünün tarihi {bugun}. Sen akıllı, kibar ve yardımcı bir yapay zeka asistanısın. Her zaman Türkçe yaz."}]},
+            {"role": "model", "parts": [{"text": "Anladım. Size nasıl yardımcı olabilirim?"}]}
         ]
 
     # Arama
