@@ -81,6 +81,14 @@ def ask_ai(text, user_id, image_path=None):
         return cevap
         
     except Exception as e:
+        # 429 Kota Aşımı Hatasını Kibarlaştırma
+        if "429" in str(e):
+            return "⏳ Şu an çok fazla istek alıyorum. Lütfen 30-40 saniye dinlenmeme izin verip tekrar dener misin?"
+        
+        # Hata durumunda hafızayı koruma
+        if not image_path and sohbet_gecmisi.get(user_id) and sohbet_gecmisi[user_id][-1]["role"] == "user":
+            sohbet_gecmisi[user_id].pop()
+            
         return f"Hata: {e}"
 
 def hafizayi_temizle(user_id):

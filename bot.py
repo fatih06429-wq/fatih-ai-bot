@@ -32,10 +32,25 @@ HTML_SAYFASI = """
         .user-msg { background-color: #2196F3; align-self: flex-end; border-bottom-right-radius: 2px; }
         .bot-msg { background-color: #1e1e1e; align-self: flex-start; border-bottom-left-radius: 2px; border: 1px solid #2a2a2a; }
         
+        /* Markdown Özel Tasarımları */
+        .bot-msg p { margin: 0 0 10px 0; }
+        .bot-msg p:last-child { margin: 0; }
+        .bot-msg code { background-color: #000; padding: 4px 8px; border-radius: 6px; font-family: Consolas, monospace; color: #4CAF50; border: 1px solid #333; }
+        .bot-msg pre { background-color: #0a0a0a; padding: 15px; border-radius: 10px; overflow-x: auto; border: 1px solid #333; }
+        .bot-msg pre code { background-color: transparent; padding: 0; border: none; color: #e0e0e0; }
+        
+        /* Yazıyor... Animasyonu */
+        .typing-indicator { display: flex; gap: 6px; padding: 5px; align-items: center; }
+        .dot { width: 8px; height: 8px; background-color: #888; border-radius: 50%; animation: blink 1.4s infinite both; }
+        .dot:nth-child(1) { animation-delay: -0.32s; }
+        .dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+
         /* Input Alanı */
         #input-area { background-color: #1e1e1e; padding: 20px 15%; display: flex; gap: 15px; border-top: 1px solid #333; align-items: center; z-index: 10; }
-        input[type="text"] { flex: 1; padding: 16px 25px; border-radius: 30px; border: 1px solid #444; background-color: #2d2d2d; color: white; font-size: 16px; outline: none; }
-        button { padding: 16px 25px; border-radius: 30px; border: none; background-color: #4CAF50; color: white; font-weight: bold; cursor: pointer; }
+        input[type="text"] { flex: 1; padding: 16px 25px; border-radius: 30px; border: 1px solid #444; background-color: #2d2d2d; color: white; font-size: 16px; outline: none; transition: 0.3s; }
+        button { padding: 16px 25px; border-radius: 30px; border: none; background-color: #4CAF50; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
         #file-btn { background-color: #555; }
     </style>
 </head>
@@ -48,16 +63,19 @@ HTML_SAYFASI = """
         <div id="input-area">
             <input type="file" id="file-input" style="display:none" accept="image/*,.pdf">
             <button id="file-btn" onclick="document.getElementById('file-input').click()">📁</button>
-            <input type="text" id="user-input" placeholder="Mesajını yaz..." autocomplete="off">
+            <input type="text" id="user-input" placeholder="Mesajını yaz..." autocomplete="off" onkeypress="if(event.key === 'Enter') mesajGonder()">
             <button id="send-btn" onclick="mesajGonder()">Gönder</button>
         </div>
     </div>
     <script>
         marked.setOptions({ breaks: true });
+        
         async function mesajGonder() {
             const input = document.getElementById("user-input");
             const fileInput = document.getElementById("file-input");
             const chatBox = document.getElementById("chat-box");
+            const sendBtn = document.getElementById("send-btn");
+            
             if (!input.value.trim() && fileInput.files.length === 0) return;
 
             const formData = new FormData();
@@ -68,9 +86,34 @@ HTML_SAYFASI = """
             input.value = "";
             fileInput.value = "";
             
-            const response = await fetch("/api/sor", { method: "POST", body: formData });
-            const data = await response.json();
-            chatBox.innerHTML += `<div class="message bot-msg"><b>Asistan:</b> <br>${marked.parse(data.cevap)}</div>`;
+            // Kutuyu kilitle ve animasyonu çıkar
+            input.disabled = true;
+            sendBtn.disabled = true;
+            const typingId = "typing-" + Date.now();
+            chatBox.innerHTML += `
+                <div id="${typingId}" class="message bot-msg">
+                    <b>Asistan:</b>
+                    <div class="typing-indicator">
+                        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+                    </div>
+                </div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+            
+            try {
+                const response = await fetch("/api/sor", { method: "POST", body: formData });
+                const data = await response.json();
+                
+                document.getElementById(typingId).remove();
+                chatBox.innerHTML += `<div class="message bot-msg"><b>Asistan:</b> <br>${marked.parse(data.cevap)}</div>`;
+            } catch (error) {
+                document.getElementById(typingId).remove();
+                chatBox.innerHTML += `<div class="message bot-msg" style="color: #ff5252;"><b>Hata:</b> Bağlantı kurulamadı.</div>`;
+            }
+            
+            // Kilidi aç
+            input.disabled = false;
+            sendBtn.disabled = false;
+            input.focus();
             chatBox.scrollTop = chatBox.scrollHeight;
         }
     </script>
@@ -103,7 +146,9 @@ def run_telegram_bot():
     app_telegram = Application.builder().token("8864490425:AAH8Xm4buW-DfeUgTkMYTKdPJ8mQNLx59q0").build()
     app_telegram.add_handler(CommandHandler("start", start_command))
     app_telegram.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
-    app_telegram.run_polling()
+    
+    # KRİTİK ÇÖZÜM: stop_signals=None eklendi.
+    app_telegram.run_polling(stop_signals=None)
 
 if __name__ == '__main__':
     threading.Thread(target=run_telegram_bot, daemon=True).start()
