@@ -143,7 +143,6 @@ HTML_SAYFASI = """
             return new Promise((resolve) => {
                 const timer = setInterval(() => {
                     anlikMetin += metin.charAt(i);
-                    // Her harf eklendiğinde markdown'a çevirip ekrana bas
                     element.innerHTML = marked.parse(anlikMetin);
                     document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
                     i++;
@@ -172,12 +171,10 @@ HTML_SAYFASI = """
                 eklentiMetni = `<br><small style="color:var(--accent);">📎 ${fileInput.files[0].name}</small>`;
             }
 
-            // Kullanıcı Mesajını Ekle
             chatBox.innerHTML += `<div class="message user-msg">${input.value} ${eklentiMetni}</div>`;
             input.value = "";
             fileInput.value = "";
             
-            // Arayüzü Kilitle ve "Düşünüyor" Animasyonunu Çıkar
             input.disabled = true;
             sendBtn.disabled = true;
             const typingId = "typing-" + Date.now();
@@ -188,22 +185,17 @@ HTML_SAYFASI = """
             chatBox.scrollTop = chatBox.scrollHeight;
             
             try {
-                // Backend'e İstek At
                 const response = await fetch("/api/sor", { method: "POST", body: formData });
                 const data = await response.json();
                 
-                // "Düşünüyor" ibaresini metin kutusuna çevir
                 const botMesajKutusu = document.getElementById(typingId);
-                botMesajKutusu.innerHTML = ""; // İçini temizle
+                botMesajKutusu.innerHTML = ""; 
                 
-                // Cevabı kelime kelime yazdır
                 await daktiloEfekti(botMesajKutusu, data.cevap);
-
             } catch (error) {
                 document.getElementById(typingId).innerHTML = `<span style="color: #ff5252;">Bağlantı hatası oluştu.</span>`;
             }
             
-            // Kilidi Aç
             input.disabled = false;
             sendBtn.disabled = false;
             input.focus();
@@ -231,15 +223,52 @@ def soru_cevapla():
     return jsonify({"cevap": cevap})
 
 # --- TELEGRAM BOTU ---
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE): await update.message.reply_text("Merhaba! AÖF Asistanına hoş geldin.")
-async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE): await update.message.reply_text(ask_ai(update.message.text, str(update.message.from_user.id)))
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE): 
+    await update.message.reply_text("Merhaba! Kerem AI'ye hoş geldin. Bana metin, fotoğraf veya PDF gönderebilirsin.")
+
+async def temizle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.message.from_user.id)
+    hafizayi_temizle(user_id)
+    await update.message.reply_text("🧹 Hafızam tamamen temizlendi! Yepyeni bir sayfa açtık.")
+
+async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.message.from_user.id)
+    caption = update.message.caption if update.message.caption else "Lütfen bu dosyayı benim için analiz et."
+    bekleme_mesaji = await update.message.reply_text("📥 Dosya inceleniyor, lütfen bekle...")
+    
+    dosya_adi = f"dosya_{user_id}"
+    
+    try:
+        if update.message.photo:
+            file = await context.bot.get_file(update.message.photo[-1].file_id)
+            dosya_adi += ".jpg"
+        elif update.message.document:
+            file = await context.bot.get_file(update.message.document.file_id)
+            dosya_adi += ".pdf"
+            
+        await file.download_to_drive(dosya_adi)
+        
+        reply = ask_ai(caption, user_id, image_path=dosya_adi)
+        await bekleme_mesaji.edit_text(reply)
+    except Exception as e:
+        await bekleme_mesaji.edit_text(f"Dosya işlenirken hata oluştu: {e}")
+    finally:
+        if os.path.exists(dosya_adi):
+            os.remove(dosya_adi)
+
+async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE): 
+    await update.message.reply_text(ask_ai(update.message.text, str(update.message.from_user.id)))
 
 def run_telegram_bot():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
     app_telegram = Application.builder().token("8864490425:AAH8Xm4buW-DfeUgTkMYTKdPJ8mQNLx59q0").build()
     app_telegram.add_handler(CommandHandler("start", start_command))
+    app_telegram.add_handler(CommandHandler("temizle", temizle_command))
+    app_telegram.add_handler(MessageHandler(filters.PHOTO | filters.Document.PDF, dosya_al))
     app_telegram.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
     
-    # KRİTİK ÇÖZÜM: stop_signals=None eklendi.
     app_telegram.run_polling(stop_signals=None)
 
 if __name__ == '__main__':
