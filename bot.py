@@ -13,7 +13,7 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# TAM EKRAN MODERN WEB ARAYÜZÜ + DOSYA + SES + MOD SEÇİMİ
+# TAM EKRAN GEMINI PRO ARAYÜZÜ (SIDEBAR, PROMPT CHIPS, TTS, COPY CODE)
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -23,58 +23,86 @@ HTML_SAYFASI = """
     <title>Kerem AI - Yapay Zeka Asistanı</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        /* CSS Değişkenleri ile Gece/Gündüz Modu Altyapısı */
         :root {
             --bg-color: #131314;
             --chat-bg: #1e1e20;
+            --sidebar-bg: #1e1e20;
             --text-color: #e3e3e3;
-            --bot-msg-bg: #282a2c;
+            --bot-msg-bg: transparent;
             --bot-border: #333;
-            --user-msg-bg: #004a77;
+            --user-msg-bg: #303030;
             --input-bg: #1e1e20;
             --input-border: #444;
             --accent: #a8c7fa;
+            --hover-bg: #282a2c;
             --header-shadow: rgba(0,0,0,0.4);
         }
 
         [data-theme="light"] {
-            --bg-color: #f0f4f9;
+            --bg-color: #ffffff;
             --chat-bg: #ffffff;
+            --sidebar-bg: #f0f4f9;
             --text-color: #1f1f1f;
-            --bot-msg-bg: #f0f4f9;
+            --bot-msg-bg: transparent;
             --bot-border: #e0e0e0;
-            --user-msg-bg: #d3e3fd;
+            --user-msg-bg: #f0f4f9;
             --input-bg: #f0f4f9;
             --input-border: #ccc;
             --accent: #0b57d0;
-            --header-shadow: rgba(0,0,0,0.1);
+            --hover-bg: #e1e5ea;
+            --header-shadow: rgba(0,0,0,0.05);
         }
 
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; transition: background-color 0.4s, color 0.4s; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; height: 100vh; display: flex; overflow: hidden; transition: background-color 0.4s, color 0.4s; }
         
-        .header { background-color: var(--chat-bg); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--bot-border); box-shadow: 0 4px 15px var(--header-shadow); z-index: 10; transition: 0.4s; }
-        .header h2 { margin: 0; color: var(--accent); font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px;}
-        
-        .header-controls { display: flex; gap: 10px; }
-        .ui-select, .theme-toggle { background: var(--bg-color); border: 1px solid var(--bot-border); color: var(--text-color); padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 15px; transition: 0.3s; outline: none; }
-        .ui-select:hover, .theme-toggle:hover { background: var(--bot-msg-bg); border-color: var(--accent); }
+        /* Sol Menü (Sidebar) */
+        .sidebar { width: 260px; background-color: var(--sidebar-bg); border-right: 1px solid var(--bot-border); display: flex; flex-direction: column; padding: 15px; transition: 0.3s; }
+        .new-chat-btn { background-color: var(--hover-bg); border: 1px solid var(--bot-border); color: var(--text-color); padding: 12px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; margin-bottom: 20px; transition: 0.2s;}
+        .new-chat-btn:hover { border-color: var(--accent); }
+        .history-title { font-size: 12px; color: #888; margin-bottom: 10px; padding-left: 5px; text-transform: uppercase; font-weight: bold;}
+        .history-list { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; flex: 1; }
+        .history-item { background: transparent; border: none; color: var(--text-color); padding: 10px; text-align: left; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: 0.2s; }
+        .history-item:hover { background-color: var(--hover-bg); }
 
-        #chat-container { flex: 1; display: flex; flex-direction: column; width: 100%; overflow: hidden; }
-        #chat-box { flex: 1; overflow-y: auto; padding: 40px 15%; display: flex; flex-direction: column; gap: 25px; scroll-behavior: smooth; }
+        /* Ana İçerik */
+        .main-content { flex: 1; display: flex; flex-direction: column; position: relative; }
         
-        .message { padding: 18px 24px; border-radius: 18px; max-width: 85%; line-height: 1.6; font-size: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: 0.3s; }
+        .header { background-color: var(--bg-color); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; z-index: 10; }
+        .header h2 { margin: 0; color: var(--text-color); font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px;}
+        .header-controls { display: flex; gap: 10px; }
+        .ui-select, .theme-toggle { background: var(--hover-bg); border: 1px solid transparent; color: var(--text-color); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; transition: 0.3s; outline: none; }
+        .ui-select:hover, .theme-toggle:hover { border-color: var(--bot-border); }
+
+        #chat-container { flex: 1; overflow-y: auto; padding: 20px 15%; display: flex; flex-direction: column; scroll-behavior: smooth; }
+        
+        /* Hoş Geldin Kartları (Prompt Chips) */
+        #welcome-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding-bottom: 50px; }
+        .greeting { font-size: 42px; font-weight: 600; background: -webkit-linear-gradient(45deg, #a8c7fa, #ffb6c1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 40px; text-align: center; }
+        .chips-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 700px; width: 100%; }
+        .chip { background-color: var(--hover-bg); border: 1px solid var(--bot-border); padding: 15px 20px; border-radius: 12px; color: var(--text-color); cursor: pointer; text-align: left; font-size: 15px; transition: 0.2s; display: flex; align-items: center; gap: 10px;}
+        .chip:hover { background-color: var(--input-bg); transform: translateY(-2px); border-color: var(--accent); }
+
+        /* Mesaj Tasarımları */
+        .message-wrapper { margin-bottom: 30px; display: flex; flex-direction: column; }
+        .message { padding: 12px 20px; border-radius: 18px; max-width: 85%; line-height: 1.6; font-size: 16px; }
         .user-msg { background-color: var(--user-msg-bg); color: var(--text-color); align-self: flex-end; border-bottom-right-radius: 4px; }
-        .bot-msg { background-color: var(--bot-msg-bg); align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid var(--bot-border); width: 100%; }
+        .bot-msg { background-color: var(--bot-msg-bg); align-self: flex-start; border-radius: 0; width: 100%; max-width: 100%; padding: 0 20px; }
         
-        /* Markdown Tasarımları */
+        /* Markdown & Kod Blokları */
         .bot-msg p { margin: 0 0 12px 0; }
         .bot-msg p:last-child { margin: 0; }
-        .bot-msg code { background-color: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 6px; font-family: Consolas, monospace; color: var(--accent); }
-        [data-theme="light"] .bot-msg code { background-color: rgba(0,0,0,0.05); }
-        .bot-msg pre { background-color: #1e1e1e; padding: 15px; border-radius: 10px; overflow-x: auto; color: #fff; }
+        .bot-msg code { background-color: var(--hover-bg); padding: 4px 8px; border-radius: 6px; font-family: Consolas, monospace; color: var(--accent); font-size: 14px; }
+        .bot-msg pre { background-color: #1e1e1e; padding: 40px 15px 15px 15px; border-radius: 10px; overflow-x: auto; color: #fff; position: relative; margin-top: 15px; }
+        .copy-btn { position: absolute; top: 8px; right: 8px; background: #333; color: #fff; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: 0.2s; }
+        .copy-btn:hover { background: #555; }
         
+        /* Aksiyon Çubuğu (Dinle, Beğen, vs.) */
+        .msg-actions { display: flex; gap: 8px; margin-top: 10px; margin-left: 20px; }
+        .action-icon { background: transparent; border: none; color: #888; font-size: 16px; cursor: pointer; padding: 6px 10px; border-radius: 6px; transition: 0.2s; display: flex; align-items: center; gap: 5px;}
+        .action-icon:hover { background: var(--hover-bg); color: var(--text-color); }
+
         /* Düşünüyor Animasyonu */
-        .thinking { display: flex; align-items: center; gap: 8px; font-style: italic; color: #888; font-size: 14px; }
+        .thinking { display: flex; align-items: center; gap: 8px; font-style: italic; color: #888; font-size: 14px; margin-left: 20px;}
         .spinner { width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
@@ -83,72 +111,128 @@ HTML_SAYFASI = """
         .listening { animation: pulse-mic 1.5s infinite; color: #ff5252 !important; }
 
         /* Modern Giriş Alanı */
-        #input-area { background-color: var(--chat-bg); padding: 20px 15%; display: flex; gap: 12px; border-top: 1px solid var(--bot-border); align-items: center; z-index: 10; transition: 0.4s; }
-        .input-wrapper { flex: 1; display: flex; background-color: var(--input-bg); border: 1px solid var(--input-border); border-radius: 30px; padding: 5px 15px; align-items: center; transition: 0.3s; }
-        .input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+        #input-container { padding: 20px 15%; background-color: var(--bg-color); z-index: 10; }
+        .input-wrapper { display: flex; background-color: var(--input-bg); border: 1px solid var(--input-border); border-radius: 30px; padding: 8px 15px; align-items: center; transition: 0.3s; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+        .input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background-color: var(--chat-bg);}
         
         input[type="text"] { flex: 1; padding: 12px 5px; border: none; background: transparent; color: var(--text-color); font-size: 16px; outline: none; }
         
         .action-btn { background: transparent; border: none; color: #888; font-size: 20px; cursor: pointer; padding: 10px; border-radius: 50%; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
-        .action-btn:hover { background-color: var(--bot-border); color: var(--text-color); }
+        .action-btn:hover { background-color: var(--hover-bg); color: var(--text-color); }
         
-        #send-btn { background-color: var(--accent); color: var(--bg-color); font-weight: bold; border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: 0.3s; }
+        #send-btn { background-color: var(--accent); color: var(--bg-color); font-weight: bold; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: 0.3s; margin-left: 10px;}
         #send-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
         #send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-        /* Kaydırma Çubuğu */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--bot-border); border-radius: 4px; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h2>✨ Kerem AI</h2>
-        <div class="header-controls">
-            <select id="ai-mode" class="ui-select" title="Yanıt Hızını Seç">
-                <option value="thinking">🧠 Düşünen Mod</option>
-                <option value="fast">⚡ Hızlı Mod</option>
-            </select>
-            <button class="theme-toggle" onclick="temaDegistir()">☀️ Açık Mod</button>
+    
+    <!-- SOL MENÜ -->
+    <div class="sidebar">
+        <button class="new-chat-btn" onclick="sayfayiYenile()">➕ Yeni Sohbet</button>
+        <div class="history-title">Son Günler</div>
+        <div class="history-list">
+            <button class="history-item">Python Bot Otomasyonu</button>
+            <button class="history-item">AÖF İşletme Vize Notları</button>
+            <button class="history-item">Ubuntu Kurulum Hataları</button>
+            <button class="history-item">Arapça Dilbilgisi Kuralları</button>
         </div>
     </div>
-    
-    <div id="chat-container">
-        <div id="chat-box">
-            <div class="message bot-msg"><b>Kerem:</b> Merhaba! Yanıt hızımı yukarıdan ayarlayabilirsin. Sana nasıl yardımcı olabilirim?</div>
+
+    <!-- ANA İÇERİK -->
+    <div class="main-content">
+        <div class="header">
+            <h2>✨ Kerem AI</h2>
+            <div class="header-controls">
+                <select id="ai-mode" class="ui-select" title="Yanıt Hızını Seç">
+                    <option value="thinking">🧠 Düşünen Mod</option>
+                    <option value="fast">⚡ Hızlı Mod</option>
+                </select>
+                <button class="theme-toggle" onclick="temaDegistir()">☀️</button>
+            </div>
         </div>
         
-        <div id="input-area">
+        <div id="chat-container">
+            <!-- HOŞ GELDİN EKRANI -->
+            <div id="welcome-screen">
+                <div class="greeting">Merhaba, bugün ne keşfedelim?</div>
+                <div class="chips-container">
+                    <div class="chip" onclick="hizliSor('AÖF ders notlarımı inceleyip benim için kritik konulardan oluşan bir sınav özeti çıkarır mısın?')">📚 AÖF Ders Özeti Çıkar</div>
+                    <div class="chip" onclick="hizliSor('Python kodumda hata alıyorum, en sık yapılan mantık hatalarını nasıl ayıklayabilirim?')">💻 Python Hata Ayıklama</div>
+                    <div class="chip" onclick="hizliSor('Bana Ammice Arapça (Suudi Arabistan) günlük diyalog kalıplarıyla pratik yaptır.')">🇸🇦 Ammice Arapça Pratik</div>
+                    <div class="chip" onclick="hizliSor('Stefan Zweig Satranç ve Sabahattin Ali Kürk Mantolu Madonna eserlerindeki psikolojik temaları karşılaştır.')">♟️ Edebi Metin Analizi</div>
+                </div>
+            </div>
+            <!-- Mesajlar buraya gelecek -->
+        </div>
+        
+        <!-- ALT GİRİŞ ALANI -->
+        <div id="input-container">
             <input type="file" id="file-input" style="display:none" accept="image/*, video/*, audio/*, .pdf, .doc, .docx">
-            
             <div class="input-wrapper">
                 <button class="action-btn" onclick="document.getElementById('file-input').click()" title="Dosya Ekle">📎</button>
                 <input type="text" id="user-input" placeholder="Kerem'e bir şey sor..." autocomplete="off" onkeypress="if(event.key === 'Enter') mesajGonder()">
                 <button class="action-btn" id="mic-btn" title="Sesli Soru Sor">🎤</button>
+                <button id="send-btn" onclick="mesajGonder()">➤</button>
             </div>
-            
-            <button id="send-btn" onclick="mesajGonder()">➤</button>
         </div>
     </div>
 
     <script>
         marked.setOptions({ breaks: true });
+        let isFirstMessage = true;
+        let lastUserMessage = ""; // Yeniden üret butonu için
 
-        // Gece/Gündüz Modu Kontrolü
+        function sayfayiYenile() { location.reload(); }
+
         function temaDegistir() {
             const body = document.body;
             const btn = document.querySelector('.theme-toggle');
             if (body.getAttribute('data-theme') === 'light') {
                 body.removeAttribute('data-theme');
-                btn.innerHTML = '☀️ Açık Mod';
+                btn.innerHTML = '☀️';
             } else {
                 body.setAttribute('data-theme', 'light');
-                btn.innerHTML = '🌙 Koyu Mod';
+                btn.innerHTML = '🌙';
             }
         }
 
-        // İnsansı Yazma Efekti (Typewriter)
+        function hizliSor(metin) {
+            document.getElementById("user-input").value = metin;
+            mesajGonder();
+        }
+
+        // KOD KOPYALAMA BUTONU EKLEYİCİ
+        function addCopyButtons(container) {
+            const pres = container.querySelectorAll('pre');
+            pres.forEach(pre => {
+                if(pre.querySelector('.copy-btn')) return; 
+                const btn = document.createElement('button');
+                btn.className = 'copy-btn';
+                btn.innerHTML = '📋 Kopyala';
+                btn.onclick = () => {
+                    navigator.clipboard.writeText(pre.querySelector('code').innerText);
+                    btn.innerHTML = '✔️ Kopyalandı';
+                    btn.style.background = '#4CAF50';
+                    setTimeout(() => { btn.innerHTML = '📋 Kopyala'; btn.style.background = '#333'; }, 2000);
+                };
+                pre.appendChild(btn);
+            });
+        }
+
+        // SESLİ OKUMA (TTS)
+        function sesliOku(btn) {
+            const textElement = btn.parentElement.previousElementSibling;
+            if(!textElement) return;
+            const s = new SpeechSynthesisUtterance(textElement.innerText);
+            s.lang = 'tr-TR';
+            window.speechSynthesis.speak(s);
+        }
+
         async function daktiloEfekti(element, metin, hiz = 15) {
             let i = 0;
             let anlikMetin = "";
@@ -156,7 +240,8 @@ HTML_SAYFASI = """
                 const timer = setInterval(() => {
                     anlikMetin += metin.charAt(i);
                     element.innerHTML = marked.parse(anlikMetin);
-                    document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+                    addCopyButtons(element);
+                    document.getElementById("chat-container").scrollTop = document.getElementById("chat-container").scrollHeight;
                     i++;
                     if (i === metin.length) {
                         clearInterval(timer);
@@ -166,60 +251,41 @@ HTML_SAYFASI = """
             });
         }
 
-        // Ses Tanıma (Web Speech API) Ayarları
+        // SES TANIMA AYARLARI
         const micBtn = document.getElementById("mic-btn");
         const userInput = document.getElementById("user-input");
         let recognition;
-
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
             recognition.lang = 'tr-TR';
-            recognition.continuous = false;
-            recognition.interimResults = false;
+            recognition.onstart = () => { micBtn.classList.add("listening"); userInput.placeholder = "Dinliyorum..."; };
+            recognition.onresult = (e) => { userInput.value = userInput.value ? userInput.value + " " + e.results[0][0].transcript : e.results[0][0].transcript; };
+            recognition.onerror = () => { userInput.placeholder = "Kerem'e bir şey sor..."; };
+            recognition.onend = () => { micBtn.classList.remove("listening"); userInput.placeholder = "Kerem'e bir şey sor..."; };
+            micBtn.onclick = () => { try { recognition.start(); } catch(e) { recognition.stop(); } };
+        } else { micBtn.style.display = "none"; }
 
-            recognition.onstart = function() {
-                micBtn.classList.add("listening");
-                userInput.placeholder = "Dinliyorum, konuşabilirsin...";
-            };
-
-            recognition.onresult = function(event) {
-                const transcript = event.results[0][0].transcript;
-                userInput.value = userInput.value ? userInput.value + " " + transcript : transcript;
-            };
-
-            recognition.onerror = function(event) {
-                console.error("Ses tanıma hatası: ", event.error);
-                userInput.placeholder = "Kerem'e bir şey sor...";
-            };
-
-            recognition.onend = function() {
-                micBtn.classList.remove("listening");
-                userInput.placeholder = "Kerem'e bir şey sor...";
-            };
-
-            micBtn.onclick = function() {
-                try {
-                    recognition.start();
-                } catch(e) {
-                    recognition.stop();
-                }
-            };
-        } else {
-            micBtn.style.display = "none";
-        }
-
-        async function mesajGonder() {
+        async function mesajGonder(retryMessage = null) {
             const input = document.getElementById("user-input");
             const fileInput = document.getElementById("file-input");
-            const chatBox = document.getElementById("chat-box");
+            const chatContainer = document.getElementById("chat-container");
             const sendBtn = document.getElementById("send-btn");
-            const aiMode = document.getElementById("ai-mode").value; // Seçilen modu al
+            const aiMode = document.getElementById("ai-mode").value;
             
-            if (!input.value.trim() && fileInput.files.length === 0) return;
+            let currentMsg = retryMessage || input.value;
+            
+            if (!currentMsg.trim() && fileInput.files.length === 0) return;
+            lastUserMessage = currentMsg; // Kaydet
+
+            // İlk mesajda Karşılama Ekranını Gizle
+            if (isFirstMessage) {
+                document.getElementById("welcome-screen").style.display = "none";
+                isFirstMessage = false;
+            }
 
             const formData = new FormData();
-            formData.append("mesaj", input.value);
+            formData.append("mesaj", currentMsg);
             
             let eklentiMetni = "";
             if (fileInput.files.length > 0) {
@@ -227,23 +293,26 @@ HTML_SAYFASI = """
                 eklentiMetni = `<br><small style="color:var(--accent);">📎 ${fileInput.files[0].name}</small>`;
             }
 
-            chatBox.innerHTML += `<div class="message user-msg">${input.value} ${eklentiMetni}</div>`;
+            if(!retryMessage) {
+                chatContainer.innerHTML += `<div class="message-wrapper"><div class="message user-msg">${currentMsg} ${eklentiMetni}</div></div>`;
+            }
+            
             input.value = "";
             fileInput.value = "";
             
-            input.disabled = true;
-            sendBtn.disabled = true;
-            micBtn.disabled = true;
+            input.disabled = true; sendBtn.disabled = true; micBtn.disabled = true;
             
-            // Moda göre bekleme yazısını ayarla
             const waitingText = aiMode === "fast" ? "Hızla yanıtlıyor..." : "Kerem Düşünüyor...";
-            
             const typingId = "typing-" + Date.now();
-            chatBox.innerHTML += `
-                <div id="${typingId}" class="message bot-msg">
-                    <div class="thinking"><div class="spinner"></div> ${waitingText}</div>
+            const wrapperId = "wrapper-" + Date.now();
+            
+            chatContainer.innerHTML += `
+                <div class="message-wrapper" id="${wrapperId}">
+                    <div id="${typingId}" class="message bot-msg">
+                        <div class="thinking"><div class="spinner"></div> ${waitingText}</div>
+                    </div>
                 </div>`;
-            chatBox.scrollTop = chatBox.scrollHeight;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
             
             try {
                 const response = await fetch("/api/sor", { method: "POST", body: formData });
@@ -252,21 +321,29 @@ HTML_SAYFASI = """
                 const botMesajKutusu = document.getElementById(typingId);
                 botMesajKutusu.innerHTML = ""; 
                 
-                // Seçime göre cevabı ekrana bas
                 if (aiMode === "fast") {
                     botMesajKutusu.innerHTML = marked.parse(data.cevap);
-                    chatBox.scrollTop = chatBox.scrollHeight;
+                    addCopyButtons(botMesajKutusu);
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
                 } else {
                     await daktiloEfekti(botMesajKutusu, data.cevap);
                 }
+
+                // AKSİYON ÇUBUĞUNU EKLE (Dinle, Beğen, Yeniden Dene)
+                const actionsHtml = `
+                <div class="msg-actions">
+                    <button class="action-icon" onclick="sesliOku(this)" title="Sesli Dinle">🔊</button>
+                    <button class="action-icon" title="İyi Yanıt">👍</button>
+                    <button class="action-icon" title="Kötü Yanıt">👎</button>
+                    <button class="action-icon" onclick="mesajGonder(lastUserMessage)" title="Yeniden Üret">🔄</button>
+                </div>`;
+                document.getElementById(wrapperId).insertAdjacentHTML('beforeend', actionsHtml);
                 
             } catch (error) {
                 document.getElementById(typingId).innerHTML = `<span style="color: #ff5252;">Bağlantı hatası oluştu.</span>`;
             }
             
-            input.disabled = false;
-            sendBtn.disabled = false;
-            micBtn.disabled = false;
+            input.disabled = false; sendBtn.disabled = false; micBtn.disabled = false;
             input.focus();
         }
     </script>
