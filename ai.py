@@ -1,7 +1,7 @@
 import requests
 import google.generativeai as genai
 import PIL.Image
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
