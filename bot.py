@@ -1,3 +1,22 @@
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# --- RENDER KANDIRMA HİLESİ (DOSYANIN EN TEPESİNDE OLMALI!) ---
+class SahteSunucu(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot ayakta!")
+
+def port_ac():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(('0.0.0.0', port), SahteSunucu)
+    server.serve_forever()
+
+threading.Thread(target=port_ac, daemon=True).start()
+print("--- SAHTE PORT AÇILDI, RENDER SUSTURULDU ---", flush=True)
+
 print("--- ADIM 1: bot.py İLK SATIR ÇALIŞTI ---", flush=True)
 
 import os
