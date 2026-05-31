@@ -1,5 +1,5 @@
 import requests
-from google import genai
+import google.generativeai as genai
 import PIL.Image
 from ddgs import DDGS
 import datetime
@@ -19,7 +19,7 @@ except Exception as e:
 sohbet_gecmisi = {}
 
 # Gemini API
-GEMINI_API_KEY = "BURAYI_RENDER_DAN_ALACAK"
+api_key = os.environ.get("GOOGLE_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 uygun_model = "gemini-2.0-flash" 
