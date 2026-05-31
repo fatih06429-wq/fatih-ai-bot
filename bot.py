@@ -20,56 +20,141 @@ HTML_SAYFASI = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yapay Zeka Asistanı</title>
+    <title>Kerem AI - Yapay Zeka Asistanı</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #ffffff; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        .header { background-color: #1e1e1e; padding: 15px 20px; text-align: center; border-bottom: 1px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 10; }
-        .header h2 { margin: 0; color: #4CAF50; font-size: 22px; letter-spacing: 1px; }
-        #chat-container { flex: 1; display: flex; flex-direction: column; background-color: #121212; width: 100%; overflow: hidden; }
-        #chat-box { flex: 1; overflow-y: auto; padding: 30px 15%; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
-        .message { padding: 15px 22px; border-radius: 12px; max-width: 80%; line-height: 1.6; word-wrap: break-word; font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .user-msg { background-color: #2196F3; align-self: flex-end; border-bottom-right-radius: 2px; }
-        .bot-msg { background-color: #1e1e1e; align-self: flex-start; border-bottom-left-radius: 2px; border: 1px solid #2a2a2a; }
-        
-        /* Markdown Özel Tasarımları */
-        .bot-msg p { margin: 0 0 10px 0; }
-        .bot-msg p:last-child { margin: 0; }
-        .bot-msg code { background-color: #000; padding: 4px 8px; border-radius: 6px; font-family: Consolas, monospace; color: #4CAF50; border: 1px solid #333; }
-        .bot-msg pre { background-color: #0a0a0a; padding: 15px; border-radius: 10px; overflow-x: auto; border: 1px solid #333; }
-        .bot-msg pre code { background-color: transparent; padding: 0; border: none; color: #e0e0e0; }
-        
-        /* Yazıyor... Animasyonu */
-        .typing-indicator { display: flex; gap: 6px; padding: 5px; align-items: center; }
-        .dot { width: 8px; height: 8px; background-color: #888; border-radius: 50%; animation: blink 1.4s infinite both; }
-        .dot:nth-child(1) { animation-delay: -0.32s; }
-        .dot:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+        /* CSS Değişkenleri ile Gece/Gündüz Modu Altyapısı */
+        :root {
+            --bg-color: #131314;
+            --chat-bg: #1e1e20;
+            --text-color: #e3e3e3;
+            --bot-msg-bg: #282a2c;
+            --bot-border: #333;
+            --user-msg-bg: #004a77;
+            --input-bg: #1e1e20;
+            --input-border: #444;
+            --accent: #a8c7fa;
+            --header-shadow: rgba(0,0,0,0.4);
+        }
 
-        /* Input Alanı */
-        #input-area { background-color: #1e1e1e; padding: 20px 15%; display: flex; gap: 15px; border-top: 1px solid #333; align-items: center; z-index: 10; }
-        input[type="text"] { flex: 1; padding: 16px 25px; border-radius: 30px; border: 1px solid #444; background-color: #2d2d2d; color: white; font-size: 16px; outline: none; transition: 0.3s; }
-        button { padding: 16px 25px; border-radius: 30px; border: none; background-color: #4CAF50; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:disabled { background-color: #555; cursor: not-allowed; }
-        #file-btn { background-color: #555; }
+        [data-theme="light"] {
+            --bg-color: #f0f4f9;
+            --chat-bg: #ffffff;
+            --text-color: #1f1f1f;
+            --bot-msg-bg: #f0f4f9;
+            --bot-border: #e0e0e0;
+            --user-msg-bg: #d3e3fd;
+            --input-bg: #f0f4f9;
+            --input-border: #ccc;
+            --accent: #0b57d0;
+            --header-shadow: rgba(0,0,0,0.1);
+        }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; transition: background-color 0.4s, color 0.4s; }
+        
+        .header { background-color: var(--chat-bg); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--bot-border); box-shadow: 0 4px 15px var(--header-shadow); z-index: 10; transition: 0.4s; }
+        .header h2 { margin: 0; color: var(--accent); font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px;}
+        .theme-toggle { background: transparent; border: 1px solid var(--bot-border); color: var(--text-color); padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        .theme-toggle:hover { background: var(--bot-msg-bg); }
+
+        #chat-container { flex: 1; display: flex; flex-direction: column; width: 100%; overflow: hidden; }
+        #chat-box { flex: 1; overflow-y: auto; padding: 40px 15%; display: flex; flex-direction: column; gap: 25px; scroll-behavior: smooth; }
+        
+        .message { padding: 18px 24px; border-radius: 18px; max-width: 85%; line-height: 1.6; font-size: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: 0.3s; }
+        .user-msg { background-color: var(--user-msg-bg); color: var(--text-color); align-self: flex-end; border-bottom-right-radius: 4px; }
+        .bot-msg { background-color: var(--bot-msg-bg); align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid var(--bot-border); width: 100%; }
+        
+        /* Markdown Tasarımları */
+        .bot-msg p { margin: 0 0 12px 0; }
+        .bot-msg p:last-child { margin: 0; }
+        .bot-msg code { background-color: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 6px; font-family: Consolas, monospace; color: var(--accent); }
+        [data-theme="light"] .bot-msg code { background-color: rgba(0,0,0,0.05); }
+        .bot-msg pre { background-color: #1e1e1e; padding: 15px; border-radius: 10px; overflow-x: auto; color: #fff; }
+        
+        /* Düşünüyor Animasyonu */
+        .thinking { display: flex; align-items: center; gap: 8px; font-style: italic; color: #888; font-size: 14px; }
+        .spinner { width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* Modern Giriş Alanı */
+        #input-area { background-color: var(--chat-bg); padding: 20px 15%; display: flex; gap: 12px; border-top: 1px solid var(--bot-border); align-items: center; z-index: 10; transition: 0.4s; }
+        .input-wrapper { flex: 1; display: flex; background-color: var(--input-bg); border: 1px solid var(--input-border); border-radius: 30px; padding: 5px 15px; align-items: center; transition: 0.3s; }
+        .input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+        
+        input[type="text"] { flex: 1; padding: 12px 5px; border: none; background: transparent; color: var(--text-color); font-size: 16px; outline: none; }
+        
+        .action-btn { background: transparent; border: none; color: #888; font-size: 20px; cursor: pointer; padding: 10px; border-radius: 50%; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
+        .action-btn:hover { background-color: var(--bot-border); color: var(--text-color); }
+        
+        #send-btn { background-color: var(--accent); color: var(--bg-color); font-weight: bold; border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: 0.3s; }
+        #send-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
+        #send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        /* Kaydırma Çubuğu */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--bot-border); border-radius: 4px; }
     </style>
 </head>
 <body>
-    <div class="header"><h2>🤖 Yapay Zeka Asistanı</h2></div>
+    <div class="header">
+        <h2>✨ Kerem AI</h2>
+        <button class="theme-toggle" onclick="temaDegistir()">☀️ Açık Mod</button>
+    </div>
+    
     <div id="chat-container">
         <div id="chat-box">
-            <div class="message bot-msg"><b>Asistan:</b> Merhaba! Dosya yükleyebilir veya soru sorabilirsin.</div>
+            <div class="message bot-msg"><b>Kerem:</b> Merhaba! Sana nasıl yardımcı olabilirim? Gelişmiş yeteneklerimle buradayım.</div>
         </div>
+        
         <div id="input-area">
-            <input type="file" id="file-input" style="display:none" accept="image/*,.pdf">
-            <button id="file-btn" onclick="document.getElementById('file-input').click()">📁</button>
-            <input type="text" id="user-input" placeholder="Mesajını yaz..." autocomplete="off" onkeypress="if(event.key === 'Enter') mesajGonder()">
-            <button id="send-btn" onclick="mesajGonder()">Gönder</button>
+            <input type="file" id="file-input" style="display:none" accept="image/*, video/*, audio/*, .pdf, .doc, .docx">
+            
+            <div class="input-wrapper">
+                <button class="action-btn" onclick="document.getElementById('file-input').click()" title="Dosya Ekle">📎</button>
+                <input type="text" id="user-input" placeholder="Kerem'e bir şey sor..." autocomplete="off" onkeypress="if(event.key === 'Enter') mesajGonder()">
+                <button class="action-btn" title="Sesli Giriş (Yakında)">🎤</button>
+            </div>
+            
+            <button id="send-btn" onclick="mesajGonder()">➤</button>
         </div>
     </div>
+
     <script>
         marked.setOptions({ breaks: true });
-        
+
+        // Gece/Gündüz Modu Kontrolü
+        function temaDegistir() {
+            const body = document.body;
+            const btn = document.querySelector('.theme-toggle');
+            if (body.getAttribute('data-theme') === 'light') {
+                body.removeAttribute('data-theme');
+                btn.innerHTML = '☀️ Açık Mod';
+            } else {
+                body.setAttribute('data-theme', 'light');
+                btn.innerHTML = '🌙 Koyu Mod';
+            }
+        }
+
+        // İnsansı Yazma Efekti (Typewriter)
+        async function daktiloEfekti(element, metin, hiz = 15) {
+            let i = 0;
+            let anlikMetin = "";
+            return new Promise((resolve) => {
+                const timer = setInterval(() => {
+                    anlikMetin += metin.charAt(i);
+                    // Her harf eklendiğinde markdown'a çevirip ekrana bas
+                    element.innerHTML = marked.parse(anlikMetin);
+                    document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+                    i++;
+                    if (i === metin.length) {
+                        clearInterval(timer);
+                        resolve();
+                    }
+                }, hiz);
+            });
+        }
+
         async function mesajGonder() {
             const input = document.getElementById("user-input");
             const fileInput = document.getElementById("file-input");
@@ -80,41 +165,48 @@ HTML_SAYFASI = """
 
             const formData = new FormData();
             formData.append("mesaj", input.value);
-            if (fileInput.files.length > 0) formData.append("dosya", fileInput.files[0]);
+            
+            let eklentiMetni = "";
+            if (fileInput.files.length > 0) {
+                formData.append("dosya", fileInput.files[0]);
+                eklentiMetni = `<br><small style="color:var(--accent);">📎 ${fileInput.files[0].name}</small>`;
+            }
 
-            chatBox.innerHTML += `<div class="message user-msg"><b>Sen:</b> ${input.value} ${fileInput.files.length ? '(Dosya eklendi)' : ''}</div>`;
+            // Kullanıcı Mesajını Ekle
+            chatBox.innerHTML += `<div class="message user-msg">${input.value} ${eklentiMetni}</div>`;
             input.value = "";
             fileInput.value = "";
             
-            // Kutuyu kilitle ve animasyonu çıkar
+            // Arayüzü Kilitle ve "Düşünüyor" Animasyonunu Çıkar
             input.disabled = true;
             sendBtn.disabled = true;
             const typingId = "typing-" + Date.now();
             chatBox.innerHTML += `
                 <div id="${typingId}" class="message bot-msg">
-                    <b>Asistan:</b>
-                    <div class="typing-indicator">
-                        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-                    </div>
+                    <div class="thinking"><div class="spinner"></div> Kerem Düşünüyor...</div>
                 </div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
             
             try {
+                // Backend'e İstek At
                 const response = await fetch("/api/sor", { method: "POST", body: formData });
                 const data = await response.json();
                 
-                document.getElementById(typingId).remove();
-                chatBox.innerHTML += `<div class="message bot-msg"><b>Asistan:</b> <br>${marked.parse(data.cevap)}</div>`;
+                // "Düşünüyor" ibaresini metin kutusuna çevir
+                const botMesajKutusu = document.getElementById(typingId);
+                botMesajKutusu.innerHTML = ""; // İçini temizle
+                
+                // Cevabı kelime kelime yazdır
+                await daktiloEfekti(botMesajKutusu, data.cevap);
+
             } catch (error) {
-                document.getElementById(typingId).remove();
-                chatBox.innerHTML += `<div class="message bot-msg" style="color: #ff5252;"><b>Hata:</b> Bağlantı kurulamadı.</div>`;
+                document.getElementById(typingId).innerHTML = `<span style="color: #ff5252;">Bağlantı hatası oluştu.</span>`;
             }
             
-            // Kilidi aç
+            // Kilidi Aç
             input.disabled = false;
             sendBtn.disabled = false;
             input.focus();
-            chatBox.scrollTop = chatBox.scrollHeight;
         }
     </script>
 </body>
