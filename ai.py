@@ -1,3 +1,4 @@
+from google.genai import types
 import os
 import json
 import PIL.Image
@@ -39,11 +40,11 @@ def internette_ara(sorgu):
 def ask_ai(text, user_id, image_path=None):
     bugun = datetime.datetime.now().strftime("%d %B %Y")
     
-    # HAFIZA YÜKLEME (Gemini'ın katı sırasına uygun şekilde: Kullanıcı -> Asistan)
+    # HAFIZA YÜKLEME (Katı Kurallı Sistem - Uydurmayı Engeller)
     if user_id not in sohbet_gecmisi:
         sohbet_gecmisi[user_id] = [
-            {"role": "user", "parts": [{"text": f"Sistem: Bugünün tarihi {bugun}. Sen akıllı, kibar ve yardımcı bir yapay zeka asistanısın. Her zaman Türkçe yaz."}]},
-            {"role": "model", "parts": [{"text": "Anladım. Size nasıl yardımcı olabilirim?"}]}
+            {"role": "user", "parts": [{"text": f"Sistem: Bugünün tarihi {bugun}. Sen profesyonel, güvenilir ve tarafsız bir yapay zeka asistanısın. En önemli kuralın: BİLMEDİĞİN ŞEYLERİ UYDURMA. Sadece %100 emin olduğun, kanıtlanabilir gerçekleri söyle. Eğer bir sorunun cevabını tam olarak bilmiyorsan, dürüstçe 'Bu konuda kesin bir bilgim yok' veya 'İnternetten kontrol etmem daha sağlıklı olur' de. Her zaman Türkçe yaz."}]},
+            {"role": "model", "parts": [{"text": "Anladım. Size sadece doğrulanmış ve kesin bilgiler sunacağım. Bilmediğim konularda dürüstçe belirteceğim ve asla uydurma bilgi vermeyeceğim."}]}
         ]
 
     # Arama
@@ -54,10 +55,20 @@ def ask_ai(text, user_id, image_path=None):
         # Fotoğraf mı Metin mi?
         if image_path:
             with PIL.Image.open(image_path) as img:
-                response = client.models.generate_content(model=uygun_model, contents=[img, full_text])
+                # Gerçekçilik kilidi eklendi (temperature=0.2)
+                response = client.models.generate_content(
+                    model=uygun_model, 
+                    contents=[img, full_text],
+                    config=types.GenerateContentConfig(temperature=0.2)
+                )
         else:
             sohbet_gecmisi[user_id].append({"role": "user", "parts": [{"text": full_text}]})
-            response = client.models.generate_content(model=uygun_model, contents=sohbet_gecmisi[user_id])
+            # Gerçekçilik kilidi eklendi (temperature=0.2)
+            response = client.models.generate_content(
+                model=uygun_model, 
+                contents=sohbet_gecmisi[user_id],
+                config=types.GenerateContentConfig(temperature=0.2)
+            )
         
         cevap = response.text
         sohbet_gecmisi[user_id].append({"role": "model", "parts": [{"text": cevap}]})
