@@ -23,7 +23,7 @@ sohbet_gecmisi = {}
 # Gemini API Başlatma
 api_key = os.environ.get("GOOGLE_API_KEY")
 client = genai.Client(api_key=api_key)
-uygun_model = "gemini-2.0-flash" 
+uygun_model = "gemini-2.5-flash"
 
 def arama_gerekli_mi(metin):
     guncel_kelimeler = ["hava", "maç", "skor", "haber", "dolar", "euro", "fiyat", "bugün", "tarih", "saat", "deprem"]
