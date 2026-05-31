@@ -7,13 +7,14 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 from ai import ask_ai, hafizayi_temizle
 from db import save
+from firebase_admin import firestore
 
 # --- FLASK WEB SUNUCUSU ---
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# TAM EKRAN GEMINI PRO ARAYÜZÜ (SIDEBAR, PROMPT CHIPS, TTS, COPY CODE)
+# TAM EKRAN GEMINI PRO ARAYÜZÜ + FIREBASE SİDEBAR (GEÇMİŞ SOHBETLER)
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -56,13 +57,14 @@ HTML_SAYFASI = """
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; height: 100vh; display: flex; overflow: hidden; transition: background-color 0.4s, color 0.4s; }
         
         /* Sol Menü (Sidebar) */
-        .sidebar { width: 260px; background-color: var(--sidebar-bg); border-right: 1px solid var(--bot-border); display: flex; flex-direction: column; padding: 15px; transition: 0.3s; }
+        .sidebar { width: 260px; background-color: var(--sidebar-bg); border-right: 1px solid var(--bot-border); display: flex; flex-direction: column; padding: 15px; transition: 0.3s; z-index: 20;}
         .new-chat-btn { background-color: var(--hover-bg); border: 1px solid var(--bot-border); color: var(--text-color); padding: 12px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; margin-bottom: 20px; transition: 0.2s;}
         .new-chat-btn:hover { border-color: var(--accent); }
         .history-title { font-size: 12px; color: #888; margin-bottom: 10px; padding-left: 5px; text-transform: uppercase; font-weight: bold;}
         .history-list { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; flex: 1; }
         .history-item { background: transparent; border: none; color: var(--text-color); padding: 10px; text-align: left; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: 0.2s; }
         .history-item:hover { background-color: var(--hover-bg); }
+        .history-item.active { background-color: var(--hover-bg); border-left: 3px solid var(--accent); border-radius: 4px; font-weight: bold;}
 
         /* Ana İçerik */
         .main-content { flex: 1; display: flex; flex-direction: column; position: relative; }
@@ -96,17 +98,15 @@ HTML_SAYFASI = """
         .copy-btn { position: absolute; top: 8px; right: 8px; background: #333; color: #fff; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: 0.2s; }
         .copy-btn:hover { background: #555; }
         
-        /* Aksiyon Çubuğu (Dinle, Beğen, vs.) */
+        /* Aksiyon Çubuğu */
         .msg-actions { display: flex; gap: 8px; margin-top: 10px; margin-left: 20px; }
         .action-icon { background: transparent; border: none; color: #888; font-size: 16px; cursor: pointer; padding: 6px 10px; border-radius: 6px; transition: 0.2s; display: flex; align-items: center; gap: 5px;}
         .action-icon:hover { background: var(--hover-bg); color: var(--text-color); }
 
-        /* Düşünüyor Animasyonu */
+        /* Animasyonlar */
         .thinking { display: flex; align-items: center; gap: 8px; font-style: italic; color: #888; font-size: 14px; margin-left: 20px;}
         .spinner { width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
-
-        /* Mikrofon Dinleme Animasyonu */
         @keyframes pulse-mic { 0% { transform: scale(1); } 50% { transform: scale(1.2); color: #ff5252; } 100% { transform: scale(1); } }
         .listening { animation: pulse-mic 1.5s infinite; color: #ff5252 !important; }
 
@@ -114,12 +114,9 @@ HTML_SAYFASI = """
         #input-container { padding: 20px 15%; background-color: var(--bg-color); z-index: 10; }
         .input-wrapper { display: flex; background-color: var(--input-bg); border: 1px solid var(--input-border); border-radius: 30px; padding: 8px 15px; align-items: center; transition: 0.3s; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
         .input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background-color: var(--chat-bg);}
-        
         input[type="text"] { flex: 1; padding: 12px 5px; border: none; background: transparent; color: var(--text-color); font-size: 16px; outline: none; }
-        
         .action-btn { background: transparent; border: none; color: #888; font-size: 20px; cursor: pointer; padding: 10px; border-radius: 50%; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
         .action-btn:hover { background-color: var(--hover-bg); color: var(--text-color); }
-        
         #send-btn { background-color: var(--accent); color: var(--bg-color); font-weight: bold; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: 0.3s; margin-left: 10px;}
         #send-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
         #send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
@@ -133,13 +130,10 @@ HTML_SAYFASI = """
     
     <!-- SOL MENÜ -->
     <div class="sidebar">
-        <button class="new-chat-btn" onclick="sayfayiYenile()">➕ Yeni Sohbet</button>
-        <div class="history-title">Son Günler</div>
-        <div class="history-list">
-            <button class="history-item">Python Bot Otomasyonu</button>
-            <button class="history-item">AÖF İşletme Vize Notları</button>
-            <button class="history-item">Ubuntu Kurulum Hataları</button>
-            <button class="history-item">Arapça Dilbilgisi Kuralları</button>
+        <button class="new-chat-btn" onclick="yeniSohbet()">➕ Yeni Sohbet</button>
+        <div class="history-title">Geçmiş Sohbetler</div>
+        <div class="history-list" id="sidebar-list">
+            <div style="color:#888; font-size:13px; text-align:center; margin-top:20px;">Yükleniyor...</div>
         </div>
     </div>
 
@@ -167,7 +161,6 @@ HTML_SAYFASI = """
                     <div class="chip" onclick="hizliSor('Stefan Zweig Satranç ve Sabahattin Ali Kürk Mantolu Madonna eserlerindeki psikolojik temaları karşılaştır.')">♟️ Edebi Metin Analizi</div>
                 </div>
             </div>
-            <!-- Mesajlar buraya gelecek -->
         </div>
         
         <!-- ALT GİRİŞ ALANI -->
@@ -184,20 +177,99 @@ HTML_SAYFASI = """
 
     <script>
         marked.setOptions({ breaks: true });
+        
+        // --- OTURUM YÖNETİMİ (SESSION) ---
+        let currentSessionId = "web_" + Date.now();
         let isFirstMessage = true;
-        let lastUserMessage = ""; // Yeniden üret butonu için
+        let lastUserMessage = ""; 
 
-        function sayfayiYenile() { location.reload(); }
+        // 1. Sayfa yüklendiğinde Firebase'den Sidebar verilerini çek
+        async function sohbetleriYukle() {
+            try {
+                const response = await fetch('/api/sohbetler');
+                const data = await response.json();
+                const list = document.getElementById('sidebar-list');
+                list.innerHTML = '';
+                
+                if (data.sohbetler.length === 0) {
+                    list.innerHTML = '<div style="color:#888; font-size:13px; text-align:center;">Henüz sohbet yok.</div>';
+                    return;
+                }
 
+                data.sohbetler.forEach(sohbet => {
+                    const btn = document.createElement('button');
+                    btn.className = `history-item ${sohbet.id === currentSessionId ? 'active' : ''}`;
+                    btn.innerText = sohbet.baslik;
+                    btn.onclick = () => sohbetAc(sohbet.id, btn);
+                    list.appendChild(btn);
+                });
+            } catch(e) {
+                console.error("Sidebar yüklenemedi", e);
+            }
+        }
+        window.onload = sohbetleriYukle;
+
+        // 2. Geçmiş Sohbeti Ekrana Yükle
+        async function sohbetAc(id, btnElement) {
+            currentSessionId = id;
+            isFirstMessage = false;
+            
+            // Aktif sınıfını güncelle
+            document.querySelectorAll('.history-item').forEach(b => b.classList.remove('active'));
+            if(btnElement) btnElement.classList.add('active');
+
+            const chatContainer = document.getElementById("chat-container");
+            chatContainer.innerHTML = `<div style="text-align:center; color:#888; padding: 20px;"><div class="spinner" style="margin:0 auto;"></div> Sohbet yükleniyor...</div>`;
+            
+            try {
+                const response = await fetch('/api/sohbet/' + id);
+                const data = await response.json();
+                chatContainer.innerHTML = '';
+                
+                if(data.mesajlar && data.mesajlar.length > 0) {
+                    data.mesajlar.forEach(msg => {
+                        if(msg.role === 'user') {
+                            chatContainer.innerHTML += `<div class="message-wrapper"><div class="message user-msg">${msg.text}</div></div>`;
+                        } else {
+                            chatContainer.innerHTML += `<div class="message-wrapper"><div class="message bot-msg">${marked.parse(msg.text)}</div></div>`;
+                        }
+                    });
+                    addCopyButtons(chatContainer);
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                } else {
+                    chatContainer.innerHTML = '<div style="text-align:center; color:#888; padding: 20px;">Bu sohbet boş.</div>';
+                }
+            } catch(e) {
+                chatContainer.innerHTML = '<div style="color:#ff5252; text-align:center;">Sohbet yüklenirken hata oluştu.</div>';
+            }
+        }
+
+        // 3. Yeni Sohbet Başlat
+        function yeniSohbet() {
+            currentSessionId = "web_" + Date.now();
+            isFirstMessage = true;
+            document.querySelectorAll('.history-item').forEach(b => b.classList.remove('active'));
+            
+            document.getElementById("chat-container").innerHTML = `
+                <div id="welcome-screen">
+                    <div class="greeting">Merhaba, bugün ne keşfedelim?</div>
+                    <div class="chips-container">
+                        <div class="chip" onclick="hizliSor('AÖF ders notlarımı inceleyip benim için kritik konulardan oluşan bir sınav özeti çıkarır mısın?')">📚 AÖF Ders Özeti Çıkar</div>
+                        <div class="chip" onclick="hizliSor('Python kodumda hata alıyorum, en sık yapılan mantık hatalarını nasıl ayıklayabilirim?')">💻 Python Hata Ayıklama</div>
+                        <div class="chip" onclick="hizliSor('Bana Ammice Arapça (Suudi Arabistan) günlük diyalog kalıplarıyla pratik yaptır.')">🇸🇦 Ammice Arapça Pratik</div>
+                        <div class="chip" onclick="hizliSor('Stefan Zweig Satranç ve Sabahattin Ali Kürk Mantolu Madonna eserlerindeki psikolojik temaları karşılaştır.')">♟️ Edebi Metin Analizi</div>
+                    </div>
+                </div>`;
+        }
+
+        // --- ARAYÜZ YARDIMCILARI ---
         function temaDegistir() {
             const body = document.body;
             const btn = document.querySelector('.theme-toggle');
             if (body.getAttribute('data-theme') === 'light') {
-                body.removeAttribute('data-theme');
-                btn.innerHTML = '☀️';
+                body.removeAttribute('data-theme'); btn.innerHTML = '☀️';
             } else {
-                body.setAttribute('data-theme', 'light');
-                btn.innerHTML = '🌙';
+                body.setAttribute('data-theme', 'light'); btn.innerHTML = '🌙';
             }
         }
 
@@ -206,7 +278,6 @@ HTML_SAYFASI = """
             mesajGonder();
         }
 
-        // KOD KOPYALAMA BUTONU EKLEYİCİ
         function addCopyButtons(container) {
             const pres = container.querySelectorAll('pre');
             pres.forEach(pre => {
@@ -224,7 +295,6 @@ HTML_SAYFASI = """
             });
         }
 
-        // SESLİ OKUMA (TTS)
         function sesliOku(btn) {
             const textElement = btn.parentElement.previousElementSibling;
             if(!textElement) return;
@@ -234,8 +304,7 @@ HTML_SAYFASI = """
         }
 
         async function daktiloEfekti(element, metin, hiz = 15) {
-            let i = 0;
-            let anlikMetin = "";
+            let i = 0; let anlikMetin = "";
             return new Promise((resolve) => {
                 const timer = setInterval(() => {
                     anlikMetin += metin.charAt(i);
@@ -243,15 +312,11 @@ HTML_SAYFASI = """
                     addCopyButtons(element);
                     document.getElementById("chat-container").scrollTop = document.getElementById("chat-container").scrollHeight;
                     i++;
-                    if (i === metin.length) {
-                        clearInterval(timer);
-                        resolve();
-                    }
+                    if (i === metin.length) { clearInterval(timer); resolve(); }
                 }, hiz);
             });
         }
 
-        // SES TANIMA AYARLARI
         const micBtn = document.getElementById("mic-btn");
         const userInput = document.getElementById("user-input");
         let recognition;
@@ -266,6 +331,7 @@ HTML_SAYFASI = """
             micBtn.onclick = () => { try { recognition.start(); } catch(e) { recognition.stop(); } };
         } else { micBtn.style.display = "none"; }
 
+        // --- ANA MESAJ GÖNDERME FONKSİYONU ---
         async function mesajGonder(retryMessage = null) {
             const input = document.getElementById("user-input");
             const fileInput = document.getElementById("file-input");
@@ -274,18 +340,18 @@ HTML_SAYFASI = """
             const aiMode = document.getElementById("ai-mode").value;
             
             let currentMsg = retryMessage || input.value;
-            
             if (!currentMsg.trim() && fileInput.files.length === 0) return;
-            lastUserMessage = currentMsg; // Kaydet
+            
+            lastUserMessage = currentMsg;
 
-            // İlk mesajda Karşılama Ekranını Gizle
             if (isFirstMessage) {
-                document.getElementById("welcome-screen").style.display = "none";
-                isFirstMessage = false;
+                const welcomeScreen = document.getElementById("welcome-screen");
+                if(welcomeScreen) welcomeScreen.style.display = "none";
             }
 
             const formData = new FormData();
             formData.append("mesaj", currentMsg);
+            formData.append("session_id", currentSessionId); 
             
             let eklentiMetni = "";
             if (fileInput.files.length > 0) {
@@ -297,9 +363,7 @@ HTML_SAYFASI = """
                 chatContainer.innerHTML += `<div class="message-wrapper"><div class="message user-msg">${currentMsg} ${eklentiMetni}</div></div>`;
             }
             
-            input.value = "";
-            fileInput.value = "";
-            
+            input.value = ""; fileInput.value = "";
             input.disabled = true; sendBtn.disabled = true; micBtn.disabled = true;
             
             const waitingText = aiMode === "fast" ? "Hızla yanıtlıyor..." : "Kerem Düşünüyor...";
@@ -329,16 +393,19 @@ HTML_SAYFASI = """
                     await daktiloEfekti(botMesajKutusu, data.cevap);
                 }
 
-                // AKSİYON ÇUBUĞUNU EKLE (Dinle, Beğen, Yeniden Dene)
                 const actionsHtml = `
                 <div class="msg-actions">
                     <button class="action-icon" onclick="sesliOku(this)" title="Sesli Dinle">🔊</button>
-                    <button class="action-icon" title="İyi Yanıt">👍</button>
-                    <button class="action-icon" title="Kötü Yanıt">👎</button>
                     <button class="action-icon" onclick="mesajGonder(lastUserMessage)" title="Yeniden Üret">🔄</button>
                 </div>`;
                 document.getElementById(wrapperId).insertAdjacentHTML('beforeend', actionsHtml);
                 
+                // Sidebar'ı ilk mesajda güncelle
+                if(isFirstMessage) {
+                    sohbetleriYukle();
+                    isFirstMessage = false;
+                }
+
             } catch (error) {
                 document.getElementById(typingId).innerHTML = `<span style="color: #ff5252;">Bağlantı hatası oluştu.</span>`;
             }
@@ -354,9 +421,35 @@ HTML_SAYFASI = """
 @app.route("/")
 def ana_sayfa(): return render_template_string(HTML_SAYFASI)
 
+# --- FIREBASE SİDEBAR API ENDPOINTLERİ ---
+@app.route("/api/sohbetler", methods=["GET"])
+def sohbetleri_getir():
+    try:
+        db_client = firestore.client()
+        docs = db_client.collection("web_sohbetler").order_by("tarih", direction=firestore.Query.DESCENDING).limit(15).stream()
+        sohbetler = []
+        for doc in docs:
+            data = doc.to_dict()
+            sohbetler.append({"id": doc.id, "baslik": data.get("baslik", "Yeni Sohbet")})
+        return jsonify({"sohbetler": sohbetler})
+    except Exception as e:
+        return jsonify({"sohbetler": []})
+
+@app.route("/api/sohbet/<session_id>", methods=["GET"])
+def sohbet_getir(session_id):
+    try:
+        db_client = firestore.client()
+        doc = db_client.collection("web_sohbetler").document(session_id).get()
+        if doc.exists:
+            return jsonify({"mesajlar": doc.to_dict().get("mesajlar", [])})
+        return jsonify({"mesajlar": []})
+    except:
+        return jsonify({"mesajlar": []})
+
 @app.route("/api/sor", methods=["POST"])
 def soru_cevapla():
     mesaj = request.form.get("mesaj", "")
+    session_id = request.form.get("session_id", "web_kullanicisi")
     dosya_yolu = None
     if 'dosya' in request.files:
         file = request.files['dosya']
@@ -364,8 +457,31 @@ def soru_cevapla():
             dosya_yolu = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
             file.save(dosya_yolu)
     
-    cevap = ask_ai(mesaj, user_id="web_kullanicisi", image_path=dosya_yolu)
+    # Session ID'yi user_id olarak göndererek hafızaları birbirinden ayırıyoruz
+    cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu)
     if dosya_yolu and os.path.exists(dosya_yolu): os.remove(dosya_yolu)
+
+    # Firebase'e Sidebar Verisini Kaydet
+    try:
+        db_client = firestore.client()
+        doc_ref = db_client.collection("web_sohbetler").document(session_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            # Yeni sohbetin başlığını ilk mesajın ilk 25 karakterinden oluştur
+            baslik = mesaj[:25] + "..." if len(mesaj) > 25 else mesaj
+            doc_ref.set({"baslik": baslik, "tarih": firestore.SERVER_TIMESTAMP, "mesajlar": []})
+        
+        # Mesajları diziye ekle (Geçmişe tıklandığında yüklenmesi için)
+        doc_ref.update({
+            "mesajlar": firestore.ArrayUnion([
+                {"role": "user", "text": mesaj},
+                {"role": "bot", "text": cevap}
+            ])
+        })
+    except Exception as e:
+        print("Firebase Sidebar Kayıt Hatası:", e)
+
     return jsonify({"cevap": cevap})
 
 # --- TELEGRAM BOTU ---
