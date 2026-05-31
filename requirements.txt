@@ -3,5 +3,5 @@ google-genai
 pillow
 duckduckgo-search
 firebase-admin
-
 python-telegram-bot
+openai-whisper
