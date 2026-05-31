@@ -13,7 +13,7 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# TAM EKRAN (FULL-SCREEN) MODERN WEB ARAYÜZÜ + DOSYA YÜKLEME
+# TAM EKRAN (FULL-SCREEN) MODERN WEB ARAYÜZÜ + DOSYA YÜKLEME + SESLİ GİRİŞ
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -76,6 +76,10 @@ HTML_SAYFASI = """
         .spinner { width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
+        /* Mikrofon Dinleme Animasyonu */
+        @keyframes pulse-mic { 0% { transform: scale(1); } 50% { transform: scale(1.2); color: #ff5252; } 100% { transform: scale(1); } }
+        .listening { animation: pulse-mic 1.5s infinite; color: #ff5252 !important; }
+
         /* Modern Giriş Alanı */
         #input-area { background-color: var(--chat-bg); padding: 20px 15%; display: flex; gap: 12px; border-top: 1px solid var(--bot-border); align-items: center; z-index: 10; transition: 0.4s; }
         .input-wrapper { flex: 1; display: flex; background-color: var(--input-bg); border: 1px solid var(--input-border); border-radius: 30px; padding: 5px 15px; align-items: center; transition: 0.3s; }
@@ -113,7 +117,7 @@ HTML_SAYFASI = """
             <div class="input-wrapper">
                 <button class="action-btn" onclick="document.getElementById('file-input').click()" title="Dosya Ekle">📎</button>
                 <input type="text" id="user-input" placeholder="Kerem'e bir şey sor..." autocomplete="off" onkeypress="if(event.key === 'Enter') mesajGonder()">
-                <button class="action-btn" title="Sesli Giriş (Yakında)">🎤</button>
+                <button class="action-btn" id="mic-btn" title="Sesli Soru Sor">🎤</button>
             </div>
             
             <button id="send-btn" onclick="mesajGonder()">➤</button>
@@ -154,6 +158,51 @@ HTML_SAYFASI = """
             });
         }
 
+        // Ses Tanıma (Web Speech API) Ayarları
+        const micBtn = document.getElementById("mic-btn");
+        const userInput = document.getElementById("user-input");
+        let recognition;
+
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'tr-TR'; // Türkçe dinleme
+            recognition.continuous = false;
+            recognition.interimResults = false;
+
+            recognition.onstart = function() {
+                micBtn.classList.add("listening");
+                userInput.placeholder = "Dinliyorum, konuşabilirsin...";
+            };
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                // Mevcut metnin üstüne ekle veya boşsa direkt yaz
+                userInput.value = userInput.value ? userInput.value + " " + transcript : transcript;
+            };
+
+            recognition.onerror = function(event) {
+                console.error("Ses tanıma hatası: ", event.error);
+                userInput.placeholder = "Kerem'e bir şey sor...";
+            };
+
+            recognition.onend = function() {
+                micBtn.classList.remove("listening");
+                userInput.placeholder = "Kerem'e bir şey sor...";
+            };
+
+            micBtn.onclick = function() {
+                try {
+                    recognition.start();
+                } catch(e) {
+                    recognition.stop();
+                }
+            };
+        } else {
+            micBtn.style.display = "none";
+            console.log("Tarayıcınız ses tanımayı desteklemiyor.");
+        }
+
         async function mesajGonder() {
             const input = document.getElementById("user-input");
             const fileInput = document.getElementById("file-input");
@@ -177,6 +226,7 @@ HTML_SAYFASI = """
             
             input.disabled = true;
             sendBtn.disabled = true;
+            micBtn.disabled = true;
             const typingId = "typing-" + Date.now();
             chatBox.innerHTML += `
                 <div id="${typingId}" class="message bot-msg">
@@ -198,6 +248,7 @@ HTML_SAYFASI = """
             
             input.disabled = false;
             sendBtn.disabled = false;
+            micBtn.disabled = false;
             input.focus();
         }
     </script>
