@@ -6,3 +6,4 @@ firebase-admin
 python-telegram-bot
 openai-whisper
 Flask==3.0.3
+pymupdf

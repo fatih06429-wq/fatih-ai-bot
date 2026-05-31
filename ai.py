@@ -2,6 +2,7 @@ from google.genai import types
 import os
 import json
 import PIL.Image
+import fitz  # PDF okuma için (requirements.txt dosyana pymupdf eklemeyi unutma!)
 from google import genai
 from duckduckgo_search import DDGS
 import datetime
@@ -40,48 +41,46 @@ def internette_ara(sorgu):
 def ask_ai(text, user_id, image_path=None):
     bugun = datetime.datetime.now().strftime("%d %B %Y")
     
-    # HAFIZA YÜKLEME (Katı Kurallı Sistem - Uydurmayı Engeller)
     if user_id not in sohbet_gecmisi:
         sohbet_gecmisi[user_id] = [
-            {"role": "user", "parts": [{"text": f"Sistem: Bugünün tarihi {bugun}. Sen profesyonel, güvenilir ve tarafsız bir yapay zeka asistanısın. En önemli kuralın: BİLMEDİĞİN ŞEYLERİ UYDURMA. Sadece %100 emin olduğun, kanıtlanabilir gerçekleri söyle. Eğer bir sorunun cevabını tam olarak bilmiyorsan, dürüstçe 'Bu konuda kesin bir bilgim yok' veya 'İnternetten kontrol etmem daha sağlıklı olur' de. Her zaman Türkçe yaz."}]},
-            {"role": "model", "parts": [{"text": "Anladım. Size sadece doğrulanmış ve kesin bilgiler sunacağım. Bilmediğim konularda dürüstçe belirteceğim ve asla uydurma bilgi vermeyeceğim."}]}
+            {"role": "user", "parts": [{"text": f"Sistem: Bugünün tarihi {bugun}. Sen profesyonel, güvenilir ve tarafsız bir yapay zeka asistanısın. BİLMEDİĞİN ŞEYLERİ UYDURMA. Her zaman Türkçe yaz."}]},
+            {"role": "model", "parts": [{"text": "Anladım. Size sadece doğrulanmış bilgiler sunacağım. Bilmediğim konularda dürüstçe belirteceğim."}]}
         ]
 
-    # Arama
     arama_sonucu = internette_ara(text) if arama_gerekli_mi(text) else ""
     full_text = f"İnternet verileri: {arama_sonucu}\n\nSoru: {text}" if arama_sonucu else text
 
     try:
-        # Fotoğraf mı Metin mi?
+        model_contents = []
+        
+        # Dosya İşleme (PDF veya Resim)
         if image_path:
-            with PIL.Image.open(image_path) as img:
-                # Gerçekçilik kilidi eklendi (temperature=0.2)
-                response = client.models.generate_content(
-                    model=uygun_model, 
-                    contents=[img, full_text],
-                    config=types.GenerateContentConfig(temperature=0.2)
-                )
+            if image_path.lower().endswith('.pdf'):
+                doc = fitz.open(image_path)
+                pdf_text = "\n".join([page.get_text() for page in doc])
+                model_contents = [f"PDF İÇERİĞİ:\n{pdf_text}\n\nSoru: {full_text}"]
+            else:
+                img = PIL.Image.open(image_path)
+                model_contents = [img, full_text]
         else:
             sohbet_gecmisi[user_id].append({"role": "user", "parts": [{"text": full_text}]})
-            # Gerçekçilik kilidi eklendi (temperature=0.2)
-            response = client.models.generate_content(
-                model=uygun_model, 
-                contents=sohbet_gecmisi[user_id],
-                config=types.GenerateContentConfig(temperature=0.2)
-            )
+            model_contents = sohbet_gecmisi[user_id]
+
+        response = client.models.generate_content(
+            model=uygun_model, 
+            contents=model_contents,
+            config=types.GenerateContentConfig(temperature=0.2)
+        )
         
         cevap = response.text
-        sohbet_gecmisi[user_id].append({"role": "model", "parts": [{"text": cevap}]})
+        if not image_path:
+            sohbet_gecmisi[user_id].append({"role": "model", "parts": [{"text": cevap}]})
         
-        # Firebase'e kaydet (Son 20 mesajı sakla ki sınır aşılmasın)
         if db:
             db.collection("sohbetler").document(str(user_id)).set({"gecmis": sohbet_gecmisi[user_id][-20:]})
         return cevap
         
     except Exception as e:
-        # Hata alırsak son eklediğimiz kullanıcı mesajını sil ki hafıza sırası bozulmasın
-        if sohbet_gecmisi[user_id] and sohbet_gecmisi[user_id][-1]["role"] == "user":
-            sohbet_gecmisi[user_id].pop()
         return f"Hata: {e}"
 
 def hafizayi_temizle(user_id):
