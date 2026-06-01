@@ -7,6 +7,7 @@ import requests
 from google import genai
 from duckduckgo_search import DDGS
 import datetime
+from hafiza import hafizaya_ekle, hafizadan_getir
 import firebase_admin
 from firebase_admin import credentials, firestore
 
@@ -58,13 +59,20 @@ def ask_ai(text, user_id, image_path=None):
     
     if user_id not in sohbet_gecmisi:
         sohbet_gecmisi[user_id] = [
-            # DİKKAT: "Türkçe yaz" kısıtlaması kaldırıldı.
             {"role": "user", "parts": [{"text": f"Sistem: Bugün {bugun}. Sen dünya çapında her dili bilen profesyonel bir asistansın. Kullanıcı seninle hangi dilde iletişim kurarsa, anadili gibi o dilde yanıt ver."}]},
             {"role": "model", "parts": [{"text": "Anladım. İstenilen dilde yardımcı olmaya hazırım."}]}
         ]
 
+    # 1. ÖNCE KALICI HAFIZAYA (VEKTÖR DB) BAK
+    vektor_bilgisi = hafizadan_getir(text)
+
+    # 2. İNTERNETE BAK (Gerekliyse)
     arama_sonucu = internette_ara(text) if arama_gerekli_mi(text) else ""
-    full_text = f"İnternet verileri: {arama_sonucu}\n\nSoru: {text}" if arama_sonucu else text
+    
+    # 3. BAĞLAMI BİRLEŞTİR
+    full_text = text
+    if arama_sonucu or vektor_bilgisi:
+        full_text = f"Önceki Öğrenilmiş Bilgiler (Hafıza):\n{vektor_bilgisi}\n\nİnternet Verileri:\n{arama_sonucu}\n\nSoru: {text}"
 
     try:
         model_contents = []
@@ -72,6 +80,10 @@ def ask_ai(text, user_id, image_path=None):
             if image_path.lower().endswith('.pdf'):
                 doc = fitz.open(image_path)
                 pdf_text = "\n".join([page.get_text() for page in doc])
+                
+                # YENİ ÖZELLİK: PDF'i kalıcı hafızaya kazı!
+                hafizaya_ekle(pdf_text, kaynak_adi=os.path.basename(image_path))
+                
                 model_contents = [f"PDF İÇERİĞİ:\n{pdf_text}\n\nSoru: {full_text}"]
             else:
                 img = PIL.Image.open(image_path)

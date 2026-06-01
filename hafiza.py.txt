@@ -1,0 +1,66 @@
+import os
+import chromadb
+from chromadb.utils import embedding_functions
+
+# ChromaDB veritabanının bilgisayarında saklanacağı klasör
+CHROMA_DATA_PATH = "vektor_hafiza"
+os.makedirs(CHROMA_DATA_PATH, exist_ok=True)
+
+# Kalıcı veritabanı bağlantısı
+client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
+
+# Derin Öğrenme Modeli: Türkçe ve çoklu dil destekli, hızlı bir vektör modelidir.
+# İlk çalışmada modeli (yaklaşık 400MB) bilgisayarına otomatik indirecek.
+sentence_transformer_ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="paraphrase-multilingual-MiniLM-L12-v2")
+
+# Koleksiyon (Tablo) oluştur veya bağlan
+koleksiyon = client.get_or_create_collection(
+    name="kerem_bilgi_bankasi",
+    embedding_function=sentence_transformer_ef
+)
+
+def metin_parcala(metin, max_kelime=150):
+    """Uzun metinleri yapay zekanın yutabileceği (anlam bütünlüğünü bozmadan) küçük parçalara ayırır."""
+    kelimeler = metin.split()
+    parcalar = []
+    for i in range(0, len(kelimeler), max_kelime):
+        parca = " ".join(kelimeler[i:i+max_kelime])
+        parcalar.append(parca)
+    return parcalar
+
+def hafizaya_ekle(metin, kaynak_adi="belge"):
+    """Metni vektörlere dönüştürüp ChromaDB'ye kaydeder."""
+    parcalar = metin_parcala(metin)
+    if not parcalar:
+        return False
+    
+    # Her bir parça için benzersiz ID oluştur
+    ids = [f"{kaynak_adi}_{i}_{os.urandom(4).hex()}" for i in range(len(parcalar))]
+    metadatalar = [{"kaynak": kaynak_adi} for _ in parcalar]
+    
+    try:
+        koleksiyon.add(
+            documents=parcalar,
+            metadatas=metadatalar,
+            ids=ids
+        )
+        print(f"✅ {kaynak_adi} başarıyla derin öğrenme hafızasına eklendi! ({len(parcalar)} vektör parçası)")
+        return True
+    except Exception as e:
+        print(f"Hafızaya ekleme hatası: {e}")
+        return False
+
+def hafizadan_getir(soru, n_sonuc=3):
+    """Kullanıcının sorusuna en çok benzeyen (vektörel olarak) bilgileri getirir."""
+    try:
+        sonuclar = koleksiyon.query(
+            query_texts=[soru],
+            n_results=n_sonuc
+        )
+        bulunan_metinler = sonuclar['documents'][0]
+        if bulunan_metinler:
+            return "\n---\n".join(bulunan_metinler)
+        return ""
+    except Exception as e:
+        print(f"Hafızadan okuma hatası: {e}")
+        return ""
