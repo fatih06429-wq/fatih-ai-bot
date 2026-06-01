@@ -42,16 +42,14 @@ def internette_ara(sorgu):
 
 def fallback_ollama(mesaj):
     try:
-        # Gelişmiş Edebi Prompt Kontrolü: Modelin uydurmasını ve polisiye türü sanmasını engeller
-        sistem_talimati = """Sen Kerem AI'sın. Çok dilli, dünya klasikleri literatürüne ve edebi analizlere son derece hakim uzman bir asistansın.
-        DİKKAT: Eğer kullanıcı sana 'Suç ve Ceza', 'Satranç', 'Kürk Mantolu Madonna', 'Martin Eden' gibi dünyaca ünlü kitaplardan bahsediyorsa, bunu sakın genel bir polisiye veya dedektiflik türü olarak algılama! Doğrudan o kitabın orijinal yazarına (Dostoyevski, Stefan Zweig, Sabahattin Ali vb.) ve o eserin gerçek karakterleri ile psikolojik tahlillerine odaklanarak doğru edebi bilgi ver. Bilmediğin veya emin olmadığın tarihi/edebi detaylar olursa uydurma, dürüstçe belirt."""
-        
+        sistem_talimati = """Sen Kerem AI'sın. Çok dilli, dünya klasikleri literatürüne ve edebi analizlere son derece hakim uzman bir asistansın."""
         payload = {"model": "qwen2.5:7b", "prompt": f"{sistem_talimati}\n\nSoru: {mesaj}", "stream": False}
         headers = {"ngrok-skip-browser-warning": "true", "Content-Type": "application/json"}
         
         response = requests.post(NGROK_LINK, json=payload, headers=headers, timeout=120)
         if response.status_code == 200:
-            return f"*(Yerel Sistem Devrede)*\n\n{response.json().get('response', '')}"
+            # ÖNEMLİ: Başındaki *(Yerel Sistem Devrede)* yazısını sildik!
+            return response.json().get('response', '')
         return f"Yedek motor meşgul. (Hata: {response.status_code})"
     except Exception as e:
         return f"Bağlantı hatası: {e}"
