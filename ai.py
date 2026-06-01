@@ -1,122 +1,115 @@
-from google.genai import types
 import os
 import json
-import PIL.Image
+import requests
 import fitz  
-import requests 
-from google import genai
-from duckduckgo_search import DDGS
+import PIL.Image
 import datetime
+from google import genai
+from google.genai import types
+from duckduckgo_search import DDGS
 from hafiza import hafizaya_ekle, hafizadan_getir
 import firebase_admin
 from firebase_admin import credentials, firestore
 from scrapers import aof_duyurulari_cek
 
-# --- AYARLAR ---
+# --- AYARLAR VE BAĞLANTILAR ---
 NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 try:
     firebase_json = os.environ.get("FIREBASE_JSON")
-    cred = credentials.Certificate(json.loads(firebase_json))
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
-    print("✅ Firebase Bağlantısı Başarılı!")
+    if firebase_json:
+        cred = credentials.Certificate(json.loads(firebase_json))
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+        db = firestore.client()
+        print("✅ Firebase Bağlantısı Başarılı!")
+    else:
+        db = None
 except Exception as e:
     print(f"❌ Firebase başlatılamadı: {e}")
     db = None
 
-sohbet_gecmisi = {}
-api_key = os.environ.get("GOOGLE_API_KEY")
-client = genai.Client(api_key=api_key)
-uygun_model = "gemini-2.5-flash" 
+# --- CLAUDE CODE SEVİYESİNDE SİSTEM İSTEMİ (SYSTEM PROMPT) ---
+SISTEM_KIMLIGI = """
+Sen, dünya çapında uzman, 'Claude Code' seviyesinde bir Kıdemli Yazılım Geliştirici (Senior Software Engineer) ve Sistem Mimarı olan Kerem AI'sın. Her zaman Türkçe dilinde yanıt vermelisin.
 
-def arama_gerekli_mi(metin):
-    guncel_kelimeler = ["hava", "maç", "skor", "haber", "dolar", "euro", "fiyat", "bugün", "tarih", "saat", "deprem"]
-    return any(kelime in metin.lower() for kelime in guncel_kelimeler)
+Kesinlikle Uyman Gereken Kodlama Kuralları:
+1. TAM VE EKSİKSİZ KOD: Bir kod yazdığında veya güncellediğinde ASLA özetleme, kısaltma veya atlama yapma. Kod binlerce satır olsa dahi "// ...mevcut kodlar..." veya "# ...buralar aynı kalacak..." gibi ifadeler kullanmak KESİNLİKLE YASAKTIR. Kullanıcının doğrudan kopyalayıp yapıştırabileceği şekilde tam kodu ver.
+2. TEKNİK DERİNLİK: Karşılaştığın hataların (error) sadece çözümünü değil, kök nedenini (root cause) teknik bir dille, profesyonelce açıkla.
+3. BEST PRACTICES: Her zaman en iyi uygulamaları (best practices), temiz kod (clean code) prensiplerini ve güvenlik önlemlerini göz önünde bulundurarak kod yaz. Mimari kararlarının arkasındaki mantığı kısaca belirt.
+4. ÇÖZÜM ODAKLILIK: Bir hata logu veya bug iletildiğinde, önce sorunun kaynağını algoritmik olarak düşün, sonra doğrudan çözüme odaklan.
+"""
 
-def internette_ara(sorgu):
-    try:
-        with DDGS() as ddgs:
-            sonuclar = list(ddgs.text(sorgu, region='tr-tr', safesearch='off', max_results=3))
-            return "\n".join([f"- {s['title']}: {s['body']}" for s in sonuclar]) if sonuclar else ""
-    except: return ""
-
-def fallback_ollama(mesaj):
-    try:
-        sistem_talimati = """Sen Kerem AI'sın. Çok dilli, dünya klasikleri literatürüne ve edebi analizlere son derece hakim uzman bir asistansın."""
-        payload = {"model": "qwen2.5:7b", "prompt": f"{sistem_talimati}\n\nSoru: {mesaj}", "stream": False}
-        headers = {"ngrok-skip-browser-warning": "true", "Content-Type": "application/json"}
-        
-        response = requests.post(NGROK_LINK, json=payload, headers=headers, timeout=120)
-        if response.status_code == 200:
-            # ÖNEMLİ: Başındaki *(Yerel Sistem Devrede)* yazısını sildik!
-            return response.json().get('response', '')
-        return f"Yedek motor meşgul. (Hata: {response.status_code})"
-    except Exception as e:
-        return f"Bağlantı hatası: {e}"
-
-def ask_ai(text, user_id, image_path=None):
-    # Eğer kullanıcı AÖF ile ilgili bir şey soruyorsa scraper'ı tetikle
-    if "aöf" in text.lower() and ("duyuru" in text.lower() or "sınav" in text.lower() or "takvim" in text.lower()):
-        duyuru_bilgisi = aof_duyurulari_cek()
-        text = f"Anadolu AÖF'ten alınan güncel duyurular:\n{duyuru_bilgisi}\n\nKullanıcı sorusu: {text}"
+def ask_ai(mesaj, user_id="default_user", image_path=None):
+    # 1. Geçmiş hafızayı getir
+    gecmis = hafizadan_getir(user_id)
     
-
-def ask_ai(text, user_id, image_path=None):
-    bugun = datetime.datetime.now().strftime("%d %B %Y")
+    # 2. Yeni mesajı hafızaya ekle
+    hafizaya_ekle(user_id, "user", mesaj)
     
-    if user_id not in sohbet_gecmisi:
-        sohbet_gecmisi[user_id] = [
-            {"role": "user", "parts": [{"text": f"Sistem: Bugün {bugun}. Sen dünya çapında her dili bilen profesyonel bir asistansın. Kullanıcı seninle hangi dilde iletişim kurarsa, anadili gibi o dilde yanıt ver."}]},
-            {"role": "model", "parts": [{"text": "Anladım. İstenilen dilde yardımcı olmaya hazırım."}]}
-        ]
-
-    vektor_bilgisi = hafizadan_getir(text)
-    arama_sonucu = internette_ara(text) if arama_gerekli_mi(text) else ""
+    # Tüm içeriği topla
+    contents = []
     
-    full_text = text
-    if arama_sonucu or vektor_bilgisi:
-        full_text = f"Önceki Öğrenilmiş Bilgiler (Hafıza):\n{vektor_bilgisi}\n\nİnternet Verileri:\n{arama_sonucu}\n\nKullanıcının Sorusu: {text}"
-
-    try:
-        model_contents = []
-        if image_path:
-            if image_path.lower().endswith('.pdf'):
+    # Görsel veya PDF varsa ekle
+    if image_path and os.path.exists(image_path):
+        if image_path.lower().endswith(".pdf"):
+            pdf_metin = ""
+            try:
                 doc = fitz.open(image_path)
-                pdf_text = "\n".join([page.get_text() for page in doc])
-                hafizaya_ekle(pdf_text, kaynak_adi=os.path.basename(image_path))
-                
-                pdf_baglami = f"Kullanıcı bir belge yükledi. Belge İçeriği Özeti:\n{pdf_text[:10000]}\n\nKullanıcının Notu: {full_text}"
-                sohbet_gecmisi[user_id].append({"role": "user", "parts": [{"text": pdf_baglami}]})
-                model_contents = sohbet_gecmisi[user_id]
-            else:
-                img = PIL.Image.open(image_path)
-                sohbet_gecmisi[user_id].append({"role": "user", "parts": [{"text": f"[Kullanıcı bir görsel yükledi] {full_text}"}]})
-                model_contents = [img, full_text]
+                for sayfa in doc:
+                    pdf_metin += sayfa.get_text() + "\n"
+                if pdf_metin.strip():
+                    contents.append(f"[PDF İÇERİĞİ]: {pdf_metin}")
+            except Exception as e:
+                contents.append(f"[PDF OKUMA HATASI]: {e}")
         else:
-            sohbet_gecmisi[user_id].append({"role": "user", "parts": [{"text": full_text}]})
-            model_contents = sohbet_gecmisi[user_id]
+            try:
+                img = PIL.Image.open(image_path)
+                contents.append(img)
+            except: pass
 
-        response = client.models.generate_content(
-            model=uygun_model, 
-            contents=model_contents,
-            config=types.GenerateContentConfig(temperature=0.2)
+    # Geçmiş bağlamı ve mevcut mesajı ekle
+    tam_metin = f"Önceki Bağlam:\n{gecmis}\n\nKullanıcının Yeni Mesajı: {mesaj}"
+    contents.append(tam_metin)
+
+    # 3. Gemini API ile bağlan (Kodlama için gemini-1.5-pro tavsiye edilir)
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        
+        # Sistem kimliğini yapılandırma olarak ekliyoruz
+        config = types.GenerateContentConfig(
+            system_instruction=SISTEM_KIMLIGI,
+            temperature=0.3 # Kodlamada halüsinasyonu önlemek için düşük sıcaklık
         )
         
+        response = client.models.generate_content(
+            model='gemini-1.5-pro',
+            contents=contents,
+            config=config
+        )
         cevap = response.text
-        if not image_path or image_path.lower().endswith('.pdf'):
-            sohbet_gecmisi[user_id].append({"role": "model", "parts": [{"text": cevap}]})
         
-        if db: db.collection("sohbetler").document(str(user_id)).set({"gecmis": sohbet_gecmisi[user_id][-20:]})
+        # Cevabı hafızaya al ve döndür
+        hafizaya_ekle(user_id, "model", cevap)
         return cevap
-        
-    except Exception as e:
-        # RENDER LOGLARINDA HATAYI GÖREBİLMEMİZ İÇİN BURAYI GÜÇLENDİRDİK
-        print(f"🔴 ANA MOTOR HATASI (YEDEĞE GEÇİLİYOR): {e}")
-        if not image_path and sohbet_gecmisi.get(user_id) and sohbet_gecmisi[user_id][-1]["role"] == "user":
-            sohbet_gecmisi[user_id].pop()
-        return fallback_ollama(text)
 
-def hafizayi_temizle(user_id):
-    if user_id in sohbet_gecmisi: del sohbet_gecmisi[user_id]
-    if db: db.collection("sohbetler").document(str(user_id)).delete()
+    # 4. YEDEK MOTOR (Ollama - Ngrok)
+    except Exception as gemini_err:
+        print(f"Gemini API Hatası, yedeğe geçiliyor: {gemini_err}")
+        try:
+            # Ngrok üzerinden Ollama'ya istek at
+            payload = {
+                "model": "qwen2.5-coder:7b", # Veya kullandığın yerel modelin adı
+                "prompt": f"{SISTEM_KIMLIGI}\n\n{tam_metin}",
+                "stream": False
+            }
+            res = requests.post(NGROK_LINK, json=payload, timeout=60)
+            if res.status_code == 200:
+                cevap = res.json().get("response", "Yerel model yanıt veremedi.")
+                hafizaya_ekle(user_id, "model", cevap)
+                return cevap
+            else:
+                return f"Yedek motor hata verdi. (Kod: {res.status_code})"
+        except Exception as ollama_err:
+            return f"Hem ana beyin hem de yedek motor meşgul. Lütfen daha sonra tekrar deneyin."
