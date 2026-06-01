@@ -3,7 +3,7 @@ import os
 import json
 import PIL.Image
 import fitz  
-import requests  # YENİ: Yerel model bağlantısı için
+import requests 
 from google import genai
 from duckduckgo_search import DDGS
 import datetime
@@ -11,7 +11,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # --- AYARLAR ---
-NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate" # Senin tünel linkin
+NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate"
 
 # Firebase Başlatma
 try:
@@ -42,14 +42,25 @@ def internette_ara(sorgu):
             return "\n".join([f"- {s['title']}: {s['body']}" for s in sonuclar]) if sonuclar else ""
     except: return ""
 
-# YENİ: Yerel Model (Ollama) Fallback
+# GÜNCELLENMİŞ: Yerel Model (Ollama) - Profesyonel Talimatlarla
 def fallback_ollama(mesaj):
     try:
-        payload = {"model": "llama3", "prompt": mesaj, "stream": False}
+        # qwen2.5:7b modeline daha profesyonel bir rol veriyoruz
+        sistem_talimati = """Sen Kerem AI'sın. Profesyonel, yardımsever, güvenilir bir asistansın.
+        Sorulara Türkçe, kısa, net ve doğrudan cevap ver. 
+        Eğer kod yazman istenirse açıklayıcı ol. Biliyorsan cevapla, bilmiyorsan dürüstçe belirt."""
+        
+        payload = {
+            "model": "qwen2.5:7b", # Bilgisayarında yüklü değilse 'llama3' yap
+            "prompt": f"{sistem_talimati}\n\nSoru: {mesaj}",
+            "stream": False
+        }
+        
         response = requests.post(NGROK_LINK, json=payload, timeout=60)
+        
         if response.status_code == 200:
             return f"*(Yerel Sistem Devrede)*\n\n{response.json().get('response', 'Yerel model cevap üretemedi.')}"
-        return "Yedek motor şu an ulaşılamaz durumda."
+        return "Yedek motor şu an meşgul."
     except Exception as e:
         return f"Bağlantı hatası: {e}"
 
@@ -94,13 +105,9 @@ def ask_ai(text, user_id, image_path=None):
         return cevap
         
     except Exception as e:
-        # HATA YAKALAMA VE YEREL MODELE GEÇİŞ
         print(f"Hata oluştu, yedek sisteme geçiliyor: {e}")
-        
-        # Eğer hafızaya eklenmişse temizle
         if not image_path and sohbet_gecmisi.get(user_id) and sohbet_gecmisi[user_id][-1]["role"] == "user":
             sohbet_gecmisi[user_id].pop()
-            
         return fallback_ollama(text)
 
 def hafizayi_temizle(user_id):
