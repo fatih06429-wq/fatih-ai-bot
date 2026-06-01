@@ -44,7 +44,6 @@ HTML_SAYFASI = """
         .history-item.active { border-left: 3px solid var(--accent); font-weight: bold;}
         .main-content { flex: 1; display: flex; flex-direction: column; }
         
-        /* Gelişmiş Header Tasarımı */
         .header { background-color: var(--bg-color); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; z-index: 10; border-bottom: 1px solid var(--bot-border);}
         .header h2 { margin: 0; font-size: 20px; font-weight: 600;}
         .header-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center;}
@@ -93,21 +92,18 @@ HTML_SAYFASI = """
         <div class="header">
             <h2>✨ Kerem AI</h2>
             <div class="header-controls">
-                <select id="app-lang" class="ui-select" title="Konuşma & Anlama Dili" onchange="dilDegisti()">
-                    <option value="tr-TR">🇹🇷 Türkçe</option>
-                    <option value="en-US">🇬🇧 English</option>
-                    <option value="ar-SA">🇸🇦 العربية</option>
-                    <option value="es-ES">🇪🇸 Español</option>
-                    <option value="de-DE">🇩🇪 Deutsch</option>
+                <select id="ai-mode" class="ui-select" title="Yanıt Hızını Seç">
+                    <option value="thinking">🧠 Düşünen Mod</option>
+                    <option value="fast">⚡ Hızlı Mod</option>
                 </select>
-                <button id="voice-chat-btn" class="btn-action" onclick="toggleVoiceChat()" title="Kesintisiz sohbet için tıkla">🎙️ Sesli Sohbet: KAPALI</button>
+                <button id="voice-chat-btn" class="btn-action" onclick="toggleVoiceChat()" title="Kesintisiz otonom sohbet">🎙️ Sesli Sohbet: KAPALI</button>
                 <button class="theme-toggle" onclick="temaDegistir()">☀️</button>
             </div>
         </div>
         
         <div id="chat-container">
             <div id="welcome-screen" style="text-align:center; padding-top:50px;">
-                <h1 style="font-size:36px; margin-bottom:10px;">Ne konuşmak istersin?</h1>
+                <h1 style="font-size:36px; margin-bottom:10px;">Ne keşfedelim?</h1>
                 <div class="chips-container">
                     <div class="chip" onclick="hizliSor('AÖF ders notlarımı inceleyip benim için özet çıkarır mısın?')">📚 AÖF Ders Özeti Çıkar</div>
                     <div class="chip" onclick="hizliSor('Python kodumda hata alıyorum, mantık hatalarını nasıl ayıklayabilirim?')">💻 Python Hata Ayıklama</div>
@@ -136,11 +132,9 @@ HTML_SAYFASI = """
         let currentSessionId = deviceId + "_" + Date.now();
         let isFirstMessage = true;
 
-        // --- SESLİ SOHBET VE DİL MOTORU YÖNETİMİ ---
         let voiceChatMode = false;
         const micBtn = document.getElementById("mic-btn");
         const userInput = document.getElementById("user-input");
-        const langSelect = document.getElementById("app-lang");
         let recognition;
         let isListening = false;
 
@@ -150,7 +144,7 @@ HTML_SAYFASI = """
             if(voiceChatMode) {
                 btn.innerHTML = '🔴 Sesli Sohbet: AÇIK';
                 btn.classList.add('active');
-                if(recognition) { recognition.lang = langSelect.value; try { recognition.start(); } catch(e){} }
+                if(recognition) { try { recognition.start(); } catch(e){} }
             } else {
                 btn.innerHTML = '🎙️ Sesli Sohbet: KAPALI';
                 btn.classList.remove('active');
@@ -159,11 +153,15 @@ HTML_SAYFASI = """
             }
         }
 
-        function dilDegisti() {
-            if(recognition) recognition.lang = langSelect.value;
+        // OTOMATİK DİL ALGILAMA MOTORU (TTS - Okuma İçin)
+        function detectLanguage(text) {
+            if (/[\u0600-\u06FF]/.test(text)) return 'ar-SA'; // Arapça harf tespiti
+            const englishWords = ['the', 'and', 'you', 'is', 'a', 'to', 'it', 'that', 'with', 'for'];
+            const words = text.toLowerCase().split(/\s+/);
+            if (words.some(w => englishWords.includes(w))) return 'en-US'; // İngilizce kelime tespiti
+            return 'tr-TR'; // Varsayılan Türkçe
         }
 
-        // Metinden Markdown Sembollerini Temizleme (TTS İçin)
         function stripMarkdown(text) {
             return text.replace(/[*#`~_]/g, '');
         }
@@ -172,24 +170,26 @@ HTML_SAYFASI = """
             window.speechSynthesis.cancel();
             const temizMetin = stripMarkdown(metin);
             const s = new SpeechSynthesisUtterance(temizMetin);
-            s.lang = langSelect.value;
+            
+            // Cevabın diline göre ses motorunu dinamik olarak eşleştirir
+            s.lang = detectLanguage(temizMetin);
             
             s.onend = () => {
                 if(voiceChatMode && autoRestartMic) {
-                    setTimeout(() => { try { recognition.lang = langSelect.value; recognition.start(); } catch(e){} }, 300);
+                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 300);
                 }
             };
             s.onerror = () => { if(voiceChatMode && autoRestartMic) { try { recognition.start(); } catch(e){} } };
             window.speechSynthesis.speak(s);
         }
 
-        // Konuşmayı Tanıma (STT) Ayarları
+        // OTOMATİK DİL ALGILAMA (STT - Dinleme İçin kullanıcının cihaz dilini baz alır)
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
-            recognition.lang = langSelect.value;
+            recognition.lang = navigator.language || 'tr-TR'; // Cihaz dilini otomatik tanır
             
-            recognition.onstart = () => { isListening = true; micBtn.classList.add("listening"); userInput.placeholder = "Seni dinliyorum..."; };
+            recognition.onstart = () => { isListening = true; micBtn.classList.add("listening"); userInput.placeholder = "Dinliyorum..."; };
             recognition.onresult = (e) => { userInput.value = (userInput.value + " " + e.results[0][0].transcript).trim(); };
             
             recognition.onend = () => { 
@@ -197,23 +197,19 @@ HTML_SAYFASI = """
                 micBtn.classList.remove("listening"); 
                 userInput.placeholder = "Yaz veya mikrofon ikonuna basarak konuş..."; 
                 
-                // OTOMATİK GÖNDERME MANTIĞI BURADA
                 if (userInput.value.trim() !== "") {
                     mesajGonder(); 
                 } else if (voiceChatMode) {
-                    // Cümle yakalanamadıysa ve ses modu açıksa tekrar dinlemeye başla
                     setTimeout(() => { try { recognition.start(); } catch(e){} }, 300);
                 }
             };
             
             micBtn.onclick = () => { 
                 if (isListening) recognition.stop();
-                else { try { recognition.lang = langSelect.value; recognition.start(); } catch(e){} }
+                else { try { recognition.start(); } catch(e){} }
             };
         } else { micBtn.style.display = "none"; }
 
-
-        // --- SOHBET ARAYÜZÜ FONKSİYONLARI ---
         async function sohbetleriYukle() {
             try {
                 const res = await fetch('/api/sohbetler?user_id=' + deviceId);
@@ -287,7 +283,6 @@ HTML_SAYFASI = """
                 const data = await response.json();
                 const botBox = document.getElementById(typingId);
                 
-                // Sesli sohbet modundaysa metni hemen okumaya başla
                 if(voiceChatMode) { sesliOkuMetin(data.cevap, true); }
                 
                 await daktiloEfekti(botBox, data.cevap);
