@@ -442,7 +442,6 @@ def sohbet_sil():
         return jsonify({"status": "success"})
     except: return jsonify({"status": "error"}), 500
 
-# YENİ EKLENEN: TÜM SOHBETLERİ SİLME ENDPOINT'İ
 @app.route("/api/sohbet/sil-tum", methods=["DELETE"])
 def sohbet_sil_tum():
     user_id = request.args.get("user_id")
@@ -478,6 +477,22 @@ def soru_cevapla():
     return jsonify({"cevap": cevap})
 
 # --- Telegram Bot Fonksiyonları ---
+async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = f"tg_{update.message.from_user.id}"
+    bekleme = await update.message.reply_text("🎧 Sesli mesajın dinleniyor...")
+    
+    dosya_adi = f"tg_ses_{user_id}_{int(time.time())}.ogg"
+    try:
+        file = await context.bot.get_file(update.message.voice.file_id)
+        await file.download_to_drive(dosya_adi)
+        
+        reply = ask_ai("Bu sesli mesaja yanıt ver.", user_id, image_path=dosya_adi)
+        await bekleme.edit_text(reply)
+    except Exception as e: 
+        await bekleme.edit_text(f"Ses işleme hatası: {e}")
+    finally:
+        if os.path.exists(dosya_adi): os.remove(dosya_adi)
+
 async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = f"tg_{update.message.from_user.id}"
     bekleme = await update.message.reply_text("📥 İşleniyor...")
@@ -495,14 +510,33 @@ async def chat(update, context):
     reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
     await update.message.reply_text(reply)
 
+async def temizle_command(update, context):
+    user_id = f"tg_{update.message.from_user.id}"
+    
+    hafizayi_temizle(user_id)
+    
+    try:
+        db_client = firestore.client()
+        docs = db_client.collection("web_sohbetler").where("user_id", "==", user_id).stream()
+        for doc in docs:
+            doc.reference.delete()
+    except:
+        pass
+        
+    await update.message.reply_text("🧹 Telegram sohbet geçmişin ve hafızam tamamen sıfırlandı!")
+
 def run_telegram_bot():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     app_bot = Application.builder().token("8864490425:AAH8Xm4buW-DfeUgTkMYTKdPJ8mQNLx59q0").build()
+    
     app_bot.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Kerem AI Hazır.")))
-    app_bot.add_handler(CommandHandler("temizle", lambda u, c: hafizayi_temizle(f"tg_{u.message.from_user.id}")))
+    app_bot.add_handler(CommandHandler("temizle", temizle_command)) 
+    
     app_bot.add_handler(MessageHandler(filters.Document.PDF, dosya_al))
+    app_bot.add_handler(MessageHandler(filters.VOICE, ses_al))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
+    
     app_bot.run_polling()
 
 # --- Uygulama Başlatma ---
