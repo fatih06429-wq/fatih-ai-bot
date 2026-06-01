@@ -9,17 +9,64 @@ from telegram.ext import Application, MessageHandler, CommandHandler, filters, C
 from ai import ask_ai, hafizayi_temizle
 from firebase_admin import firestore
 
-# --- Flask Uygulaması ---
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# HTML sayfası aynı, buraya dokunmadık.
+# TAM TASARIMLI ARAYÜZ (sidebar, karanlık mod, daktilo vb.)
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
-<head><meta charset="UTF-8"><title>Kerem AI</title></head>
-<body><h1>Kerem AI Web Arayüzü</h1></body>
+<head>
+    <meta charset="UTF-8">
+    <title>Kerem AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root { --bg: #131314; --sidebar: #1e1e20; --text: #e3e3e3; --accent: #a8c7fa; }
+        body { font-family: sans-serif; background-color: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
+        .sidebar { width: 260px; background: var(--sidebar); padding: 15px; display: flex; flex-direction: column; }
+        .main { flex: 1; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; }
+        #chat-container { flex: 1; max-width: 800px; margin: 0 auto; width: 100%; }
+        .message { padding: 15px; margin: 10px 0; border-radius: 10px; background: #202123; }
+        .input-area { max-width: 800px; margin: 20px auto; display: flex; gap: 10px; width: 100%; }
+        input { flex: 1; padding: 12px; border-radius: 5px; background: #303030; border: 1px solid #444; color: white; }
+        button { padding: 10px 20px; cursor: pointer; background: var(--accent); border: none; border-radius: 5px; }
+        .history-item { cursor: pointer; padding: 10px; border-bottom: 1px solid #333; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h3>Sohbetler</h3>
+        <button onclick="location.reload()">Yeni Sohbet</button>
+        <div id="sidebar-list"></div>
+    </div>
+    <div class="main">
+        <div id="chat-container"><h2>✨ Kerem AI</h2></div>
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Kerem'e bir şey sor...">
+            <button onclick="mesajGonder()">Gönder</button>
+        </div>
+    </div>
+    <script>
+        let deviceId = localStorage.getItem("dev_id") || "user_" + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem("dev_id", deviceId);
+        let sessionId = deviceId + "_" + Date.now();
+
+        async function mesajGonder() {
+            const input = document.getElementById('user-input');
+            const chat = document.getElementById('chat-container');
+            const msg = input.value;
+            if(!msg) return;
+            chat.innerHTML += `<div class="message"><b>Sen:</b> ${msg}</div>`;
+            const fd = new FormData();
+            fd.append('mesaj', msg); fd.append('session_id', sessionId); fd.append('user_id', deviceId);
+            const res = await fetch('/api/sor', {method: 'POST', body: fd});
+            const data = await res.json();
+            chat.innerHTML += `<div class="message"><b>Kerem:</b> ${marked.parse(data.cevap)}</div>`;
+            input.value = '';
+        }
+    </script>
+</body>
 </html>
 """
 
@@ -28,86 +75,38 @@ def ana_sayfa(): return render_template_string(HTML_SAYFASI)
 
 @app.route("/api/sohbetler", methods=["GET"])
 def sohbetleri_getir():
-    user_id = request.args.get("user_id")
-    if not user_id: return jsonify({"sohbetler": []})
     try:
-        docs = firestore.client().collection("web_sohbetler").where("user_id", "==", user_id).stream()
-        sohbetler = [{"id": d.id, "baslik": d.to_dict().get("baslik", "Yeni")} for d in docs]
-        sohbetler.sort(key=lambda x: x["id"], reverse=True)
-        return jsonify({"sohbetler": sohbetler[:15]})
+        docs = firestore.client().collection("web_sohbetler").where("user_id", "==", request.args.get("user_id")).stream()
+        return jsonify({"sohbetler": [{"id": d.id, "baslik": d.to_dict().get("baslik")} for d in docs]})
     except: return jsonify({"sohbetler": []})
-
-@app.route("/api/sohbet/<session_id>", methods=["GET"])
-def sohbet_getir(session_id):
-    try:
-        doc = firestore.client().collection("web_sohbetler").document(session_id).get()
-        return jsonify({"mesajlar": doc.to_dict().get("mesajlar", []) if doc.exists else []})
-    except: return jsonify({"mesajlar": []})
-
-@app.route("/api/sohbet/sil", methods=["DELETE"])
-def sohbet_sil():
-    session_id = request.args.get("session_id")
-    if not session_id: return jsonify({"status": "error"}), 400
-    try:
-        firestore.client().collection("web_sohbetler").document(session_id).delete()
-        hafizayi_temizle(session_id)
-        return jsonify({"status": "success"})
-    except: return jsonify({"status": "error"}), 500
 
 @app.route("/api/sor", methods=["POST"])
 def soru_cevapla():
     mesaj = request.form.get("mesaj", "")
     session_id = request.form.get("session_id", "")
-    user_id = request.form.get("user_id", "")
-    dosya_yolu = None
-    if 'dosya' in request.files and request.files['dosya'].filename:
-        dosya_yolu = os.path.join(UPLOAD_FOLDER, secure_filename(request.files['dosya'].filename))
-        request.files['dosya'].save(dosya_yolu)
-    cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu)
-    if dosya_yolu and os.path.exists(dosya_yolu): os.remove(dosya_yolu)
-    
+    cevap = ask_ai(mesaj, user_id=session_id)
     try:
         doc_ref = firestore.client().collection("web_sohbetler").document(session_id)
-        if not doc_ref.get().exists: doc_ref.set({"baslik": mesaj[:25], "user_id": user_id, "mesajlar": []})
+        if not doc_ref.get().exists: doc_ref.set({"baslik": mesaj[:25], "user_id": request.form.get("user_id"), "mesajlar": []})
         doc_ref.update({"mesajlar": firestore.ArrayUnion([{"role": "user", "text": mesaj}, {"role": "bot", "text": cevap}])})
     except: pass
     return jsonify({"cevap": cevap})
 
-# --- Telegram Bot Fonksiyonları ---
-async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = f"tg_{update.message.from_user.id}"
-    bekleme = await update.message.reply_text("📥 İşleniyor...")
-    dosya_adi = f"tg_doc_{user_id}_{int(time.time())}.pdf"
-    try:
-        file = await context.bot.get_file(update.message.document.file_id)
-        await file.download_to_drive(dosya_adi)
-        reply = ask_ai(update.message.caption or "Analiz et", user_id, image_path=dosya_adi)
-        await bekleme.edit_text(reply)
-    except Exception as e: await bekleme.edit_text(f"Hata: {e}")
-    finally:
-        if os.path.exists(dosya_adi): os.remove(dosya_adi)
-
-async def chat(update, context): 
-    reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
+# --- Telegram ve Başlatma ---
+async def dosya_al(update, context):
+    dosya_adi = f"tg_{int(time.time())}.pdf"
+    file = await context.bot.get_file(update.message.document.file_id)
+    await file.download_to_drive(dosya_adi)
+    reply = ask_ai(update.message.caption or "Analiz et", f"tg_{update.message.from_user.id}", image_path=dosya_adi)
     await update.message.reply_text(reply)
+    if os.path.exists(dosya_adi): os.remove(dosya_adi)
 
 def run_telegram_bot():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     app_bot = Application.builder().token("8864490425:AAH8Xm4buW-DfeUgTkMYTKdPJ8mQNLx59q0").build()
-    app_bot.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Kerem AI Hazır.")))
-    app_bot.add_handler(CommandHandler("temizle", lambda u, c: hafizayi_temizle(f"tg_{u.message.from_user.id}")))
     app_bot.add_handler(MessageHandler(filters.Document.PDF, dosya_al))
-    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: asyncio.run(u.message.reply_text(ask_ai(u.message.text, f"tg_{u.message.from_user.id}")))))
     app_bot.run_polling()
 
-# --- Uygulama Başlatma ---
 if __name__ == '__main__':
-    # Flask arka planda çalışacak
-    def run_flask():
-        app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), use_reloader=False)
-    
-    threading.Thread(target=run_flask, daemon=True).start()
-    
-    # Telegram botu main thread'de çalışacak
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), use_reloader=False), daemon=True).start()
     run_telegram_bot()
