@@ -42,25 +42,32 @@ def internette_ara(sorgu):
             return "\n".join([f"- {s['title']}: {s['body']}" for s in sonuclar]) if sonuclar else ""
     except: return ""
 
-# GÜNCELLENMİŞ: Yerel Model (Ollama) - Profesyonel Talimatlarla
+# GÜNCELLENMİŞ: Ngrok Bypass Headers ve Timeout Uzatması Eklendi
 def fallback_ollama(mesaj):
     try:
-        # qwen2.5:7b modeline daha profesyonel bir rol veriyoruz
         sistem_talimati = """Sen Kerem AI'sın. Profesyonel, yardımsever, güvenilir bir asistansın.
         Sorulara Türkçe, kısa, net ve doğrudan cevap ver. 
         Eğer kod yazman istenirse açıklayıcı ol. Biliyorsan cevapla, bilmiyorsan dürüstçe belirt."""
         
         payload = {
-            "model": "qwen2.5:7b", # Bilgisayarında yüklü değilse 'llama3' yap
+            "model": "qwen2.5:7b",
             "prompt": f"{sistem_talimati}\n\nSoru: {mesaj}",
             "stream": False
         }
         
-        response = requests.post(NGROK_LINK, json=payload, timeout=60)
+        # Ngrok uyarı sayfasını atlamak için hayati önem taşıyan başlıklar
+        headers = {
+            "ngrok-skip-browser-warning": "true",
+            "Content-Type": "application/json"
+        }
+        
+        # Yerel model bazen geç cevap verebilir, timeout'u 120 saniyeye çıkardık
+        response = requests.post(NGROK_LINK, json=payload, headers=headers, timeout=120)
         
         if response.status_code == 200:
             return f"*(Yerel Sistem Devrede)*\n\n{response.json().get('response', 'Yerel model cevap üretemedi.')}"
-        return "Yedek motor şu an meşgul."
+        
+        return f"Yedek motor şu an meşgul. (Hata: {response.status_code})"
     except Exception as e:
         return f"Bağlantı hatası: {e}"
 

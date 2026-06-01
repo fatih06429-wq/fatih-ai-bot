@@ -128,7 +128,6 @@ HTML_SAYFASI = """
 </head>
 <body>
     
-    <!-- SOL MENÜ -->
     <div class="sidebar">
         <button class="new-chat-btn" onclick="yeniSohbet()">➕ Yeni Sohbet</button>
         <div class="history-title">Geçmiş Sohbetler</div>
@@ -137,7 +136,6 @@ HTML_SAYFASI = """
         </div>
     </div>
 
-    <!-- ANA İÇERİK -->
     <div class="main-content">
         <div class="header">
             <h2>✨ Kerem AI</h2>
@@ -151,7 +149,6 @@ HTML_SAYFASI = """
         </div>
         
         <div id="chat-container">
-            <!-- HOŞ GELDİN EKRANI -->
             <div id="welcome-screen">
                 <div class="greeting">Merhaba, bugün ne keşfedelim?</div>
                 <div class="chips-container">
@@ -163,7 +160,6 @@ HTML_SAYFASI = """
             </div>
         </div>
         
-        <!-- ALT GİRİŞ ALANI -->
         <div id="input-container">
             <input type="file" id="file-input" style="display:none" accept="image/*, video/*, audio/*, .pdf, .doc, .docx">
             <div class="input-wrapper">
@@ -178,15 +174,21 @@ HTML_SAYFASI = """
     <script>
         marked.setOptions({ breaks: true });
         
-        // --- OTURUM YÖNETİMİ (SESSION) ---
-        let currentSessionId = "web_" + Date.now();
+        // --- 1. KULLANICI İZOLASYONU (Cihaza Özel Kimlik) ---
+        let deviceId = localStorage.getItem("kerem_device_id");
+        if (!deviceId) {
+            deviceId = "user_" + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem("kerem_device_id", deviceId);
+        }
+
+        let currentSessionId = deviceId + "_" + Date.now();
         let isFirstMessage = true;
         let lastUserMessage = ""; 
 
-        // 1. Sayfa yüklendiğinde Firebase'den Sidebar verilerini çek
+        // 1. Sayfa yüklendiğinde SADECE BU CİHAZIN sohbetlerini çek
         async function sohbetleriYukle() {
             try {
-                const response = await fetch('/api/sohbetler');
+                const response = await fetch('/api/sohbetler?user_id=' + deviceId);
                 const data = await response.json();
                 const list = document.getElementById('sidebar-list');
                 list.innerHTML = '';
@@ -214,7 +216,6 @@ HTML_SAYFASI = """
             currentSessionId = id;
             isFirstMessage = false;
             
-            // Aktif sınıfını güncelle
             document.querySelectorAll('.history-item').forEach(b => b.classList.remove('active'));
             if(btnElement) btnElement.classList.add('active');
 
@@ -246,7 +247,7 @@ HTML_SAYFASI = """
 
         // 3. Yeni Sohbet Başlat
         function yeniSohbet() {
-            currentSessionId = "web_" + Date.now();
+            currentSessionId = deviceId + "_" + Date.now();
             isFirstMessage = true;
             document.querySelectorAll('.history-item').forEach(b => b.classList.remove('active'));
             
@@ -262,7 +263,6 @@ HTML_SAYFASI = """
                 </div>`;
         }
 
-        // --- ARAYÜZ YARDIMCILARI ---
         function temaDegistir() {
             const body = document.body;
             const btn = document.querySelector('.theme-toggle');
@@ -317,19 +317,49 @@ HTML_SAYFASI = """
             });
         }
 
+        // --- 2. SESLİ KOMUT DÜZELTMESİ (Aç/Kapat Mantığı) ---
         const micBtn = document.getElementById("mic-btn");
         const userInput = document.getElementById("user-input");
         let recognition;
+        let isListening = false;
+
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
             recognition.lang = 'tr-TR';
-            recognition.onstart = () => { micBtn.classList.add("listening"); userInput.placeholder = "Dinliyorum..."; };
-            recognition.onresult = (e) => { userInput.value = userInput.value ? userInput.value + " " + e.results[0][0].transcript : e.results[0][0].transcript; };
-            recognition.onerror = () => { userInput.placeholder = "Kerem'e bir şey sor..."; };
-            recognition.onend = () => { micBtn.classList.remove("listening"); userInput.placeholder = "Kerem'e bir şey sor..."; };
-            micBtn.onclick = () => { try { recognition.start(); } catch(e) { recognition.stop(); } };
-        } else { micBtn.style.display = "none"; }
+            
+            recognition.onstart = () => { 
+                isListening = true; 
+                micBtn.classList.add("listening"); 
+                userInput.placeholder = "Dinliyorum..."; 
+            };
+            
+            recognition.onresult = (e) => { 
+                userInput.value = userInput.value ? userInput.value + " " + e.results[0][0].transcript : e.results[0][0].transcript; 
+            };
+            
+            recognition.onerror = () => { 
+                isListening = false;
+                micBtn.classList.remove("listening");
+                userInput.placeholder = "Kerem'e bir şey sor..."; 
+            };
+            
+            recognition.onend = () => { 
+                isListening = false; 
+                micBtn.classList.remove("listening"); 
+                userInput.placeholder = "Kerem'e bir şey sor..."; 
+            };
+            
+            micBtn.onclick = () => { 
+                if (isListening) {
+                    recognition.stop();
+                } else {
+                    try { recognition.start(); } catch(e) { console.error("Mikrofon başlatılamadı", e); }
+                }
+            };
+        } else { 
+            micBtn.style.display = "none"; 
+        }
 
         // --- ANA MESAJ GÖNDERME FONKSİYONU ---
         async function mesajGonder(retryMessage = null) {
@@ -352,6 +382,7 @@ HTML_SAYFASI = """
             const formData = new FormData();
             formData.append("mesaj", currentMsg);
             formData.append("session_id", currentSessionId); 
+            formData.append("user_id", deviceId); // Backend'e kimlik bildirimi
             
             let eklentiMetni = "";
             if (fileInput.files.length > 0) {
@@ -400,7 +431,6 @@ HTML_SAYFASI = """
                 </div>`;
                 document.getElementById(wrapperId).insertAdjacentHTML('beforeend', actionsHtml);
                 
-                // Sidebar'ı ilk mesajda güncelle
                 if(isFirstMessage) {
                     sohbetleriYukle();
                     isFirstMessage = false;
@@ -421,18 +451,27 @@ HTML_SAYFASI = """
 @app.route("/")
 def ana_sayfa(): return render_template_string(HTML_SAYFASI)
 
-# --- FIREBASE SİDEBAR API ENDPOINTLERİ ---
+# --- FIREBASE SİDEBAR API ENDPOINTLERİ (GÜNCELLENDİ) ---
 @app.route("/api/sohbetler", methods=["GET"])
 def sohbetleri_getir():
+    user_id = request.args.get("user_id")
+    if not user_id: return jsonify({"sohbetler": []})
+
     try:
         db_client = firestore.client()
-        docs = db_client.collection("web_sohbetler").order_by("tarih", direction=firestore.Query.DESCENDING).limit(15).stream()
+        # Sadece bu cihaza ait olan sohbetleri getir
+        docs = db_client.collection("web_sohbetler").where("user_id", "==", user_id).stream()
+        
         sohbetler = []
         for doc in docs:
             data = doc.to_dict()
             sohbetler.append({"id": doc.id, "baslik": data.get("baslik", "Yeni Sohbet")})
-        return jsonify({"sohbetler": sohbetler})
+            
+        # ID'sine göre tersten sırala (En yeni en üstte)
+        sohbetler.sort(key=lambda x: x["id"], reverse=True)
+        return jsonify({"sohbetler": sohbetler[:15]})
     except Exception as e:
+        print("Sohbet getirme hatası:", e)
         return jsonify({"sohbetler": []})
 
 @app.route("/api/sohbet/<session_id>", methods=["GET"])
@@ -450,6 +489,8 @@ def sohbet_getir(session_id):
 def soru_cevapla():
     mesaj = request.form.get("mesaj", "")
     session_id = request.form.get("session_id", "web_kullanicisi")
+    user_id = request.form.get("user_id", "anonim")
+    
     dosya_yolu = None
     if 'dosya' in request.files:
         file = request.files['dosya']
@@ -457,7 +498,7 @@ def soru_cevapla():
             dosya_yolu = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
             file.save(dosya_yolu)
     
-    # Session ID'yi user_id olarak göndererek hafızaları birbirinden ayırıyoruz
+    # Session ID'yi ask_ai'ye göndererek bu sohbete özel hafıza yaratıyoruz
     cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu)
     if dosya_yolu and os.path.exists(dosya_yolu): os.remove(dosya_yolu)
 
@@ -468,11 +509,16 @@ def soru_cevapla():
         doc = doc_ref.get()
         
         if not doc.exists:
-            # Yeni sohbetin başlığını ilk mesajın ilk 25 karakterinden oluştur
+            # Yeni sohbet: user_id etiketini mutlaka ekliyoruz
             baslik = mesaj[:25] + "..." if len(mesaj) > 25 else mesaj
-            doc_ref.set({"baslik": baslik, "tarih": firestore.SERVER_TIMESTAMP, "mesajlar": []})
+            doc_ref.set({
+                "baslik": baslik, 
+                "user_id": user_id, 
+                "tarih": firestore.SERVER_TIMESTAMP, 
+                "mesajlar": []
+            })
         
-        # Mesajları diziye ekle (Geçmişe tıklandığında yüklenmesi için)
+        # Mesajları diziye ekle
         doc_ref.update({
             "mesajlar": firestore.ArrayUnion([
                 {"role": "user", "text": mesaj},
