@@ -8,3 +8,4 @@ python-telegram-bot
 pillow
 pysqlite3-binary
 chromadb
+beautifulsoup4
