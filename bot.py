@@ -34,6 +34,7 @@ HTML_SAYFASI = """
             --input-border: #444;
             --accent: #a8c7fa; 
             --hover-bg: #282a2c;
+            --icon-color: #e3e3e3;
         }
         [data-theme="light"] {
             --bg-color: #ffffff; 
@@ -47,6 +48,7 @@ HTML_SAYFASI = """
             --input-border: #ccc;
             --accent: #0b57d0; 
             --hover-bg: #e1e5ea;
+            --icon-color: #444746;
         }
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -59,7 +61,6 @@ HTML_SAYFASI = """
             transition: background-color 0.3s, color 0.3s; 
         }
         
-        /* Sol Menü (Sidebar) */
         .sidebar { width: 260px; background-color: var(--sidebar-bg); border-right: 1px solid var(--bot-border); display: flex; flex-direction: column; padding: 15px; z-index: 20;}
         .new-chat-btn { background-color: var(--hover-bg); border: 1px solid var(--bot-border); color: var(--text-color); padding: 12px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: 600; margin-bottom: 20px; transition: 0.2s;}
         .new-chat-btn:hover { border-color: var(--accent); }
@@ -68,16 +69,14 @@ HTML_SAYFASI = """
         .history-item:hover, .history-item.active { background-color: var(--hover-bg); }
         .history-item.active { border-left: 3px solid var(--accent); font-weight: bold;}
         
-        /* Ana İçerik Alanı */
         .main-content { flex: 1; display: flex; flex-direction: column; background-color: var(--chat-bg); position: relative; }
         
         .header { background-color: var(--bg-color); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; z-index: 10; border-bottom: 1px solid var(--bot-border); transition: background-color 0.3s; }
         .header h2 { margin: 0; font-size: 20px; font-weight: 600;}
         .header-controls { display: flex; gap: 10px; align-items: center;}
         
-        .theme-toggle, .btn-action { background: var(--hover-bg); border: 1px solid transparent; color: var(--text-color); padding: 8px 14px; border-radius: 20px; cursor: pointer; font-size: 13px; outline: none; transition: 0.2s;}
-        .theme-toggle:hover, .btn-action:hover { border-color: var(--input-border); }
-        .btn-action.active { background: rgba(255, 82, 82, 0.15); color: #ff5252; border-color: #ff5252; font-weight: bold;}
+        .theme-toggle { background: var(--hover-bg); border: 1px solid transparent; color: var(--text-color); padding: 8px 14px; border-radius: 20px; cursor: pointer; font-size: 13px; outline: none; transition: 0.2s;}
+        .theme-toggle:hover { border-color: var(--input-border); }
 
         #chat-container { flex: 1; overflow-y: auto; padding: 20px 15%; display: flex; flex-direction: column; scroll-behavior: smooth; }
         .chips-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; max-width: 700px; margin: 0 auto; margin-top: 40px;}
@@ -99,31 +98,32 @@ HTML_SAYFASI = """
         .spinner { width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s infinite; display: inline-block;}
         @keyframes spin { 100% { transform: rotate(360deg); } }
         .listening { animation: pulse-mic 1.5s infinite; color: #ff5252 !important; }
-        @keyframes pulse-mic { 50% { transform: scale(1.2); } }
+        @keyframes pulse-mic { 50% { transform: scale(1.1); } }
 
-        /* --- MÜKEMMEL GEMINI KAPSÜL GİRİŞ ALANI --- */
+        /* ZARİF KAPSÜL GİRİŞ ALANI */
         #input-container { padding: 10px 15% 25px 15%; background-color: var(--bg-color); display: flex; flex-direction: column; align-items: center; transition: background-color 0.3s; }
-        .input-capsule { display: flex; background-color: var(--input-bg); border: 1px solid var(--input-border); border-radius: 35px; padding: 6px 14px 6px 20px; align-items: center; width: 100%; max-width: 750px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: 0.3s; }
+        .input-capsule { display: flex; background-color: var(--input-bg); border: 1px solid var(--input-border); border-radius: 35px; padding: 6px 14px 6px 14px; align-items: center; width: 100%; max-width: 750px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: 0.3s; }
         .input-capsule:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background-color: var(--bg-color); }
         
-        .capsule-btn { background: transparent; border: none; color: var(--text-color); font-size: 22px; cursor: pointer; padding: 8px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: 0.2s; opacity: 0.8; }
+        .capsule-btn { background: transparent; border: none; color: var(--icon-color); cursor: pointer; padding: 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: 0.2s; opacity: 0.7; }
         .capsule-btn:hover { background-color: var(--hover-bg); opacity: 1; }
         
         input[type="text"] { flex: 1; padding: 12px 15px; border: none; background: transparent; color: var(--text-color); font-size: 16px; outline: none; }
         input[type="text"]::placeholder { color: #888; }
         
-        /* Kapsül İçi Mod Seçici Dropdown */
         .capsule-select { background: transparent; border: none; color: var(--text-color); padding: 8px 12px; cursor: pointer; font-size: 14px; outline: none; font-weight: 500; transition: 0.2s; border-radius: 20px; margin-right: 5px; }
         .capsule-select:hover { background-color: var(--hover-bg); }
         .capsule-select option { background-color: var(--input-bg); color: var(--text-color); }
         
-        /* Alt Uyarı Yazısı */
         .disclaimer-text { font-size: 12px; color: #888; margin-top: 10px; text-align: center; width: 100%; letter-spacing: 0.3px; }
     </style>
 </head>
 <body>
     <div class="sidebar">
-        <button class="new-chat-btn" onclick="yeniSohbet()">➕ Yeni Sohbet</button>
+        <button class="new-chat-btn" onclick="yeniSohbet()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 
+            Yeni Sohbet
+        </button>
         <div style="font-size:12px; color:#888; margin-bottom:10px; font-weight:bold; padding-left:5px;">GEÇMİŞ SOHBETLER</div>
         <div class="history-list" id="sidebar-list"></div>
     </div>
@@ -132,7 +132,6 @@ HTML_SAYFASI = """
         <div class="header">
             <h2>✨ Kerem AI</h2>
             <div class="header-controls">
-                <button id="voice-chat-btn" class="btn-action" onclick="toggleVoiceChat()" title="Kesintisiz otonom sohbet">🎙️ Sesli Sohbet: KAPALI</button>
                 <button id="theme-btn" class="theme-toggle" onclick="temaDegistir()">☀️</button>
             </div>
         </div>
@@ -152,7 +151,9 @@ HTML_SAYFASI = """
         <div id="input-container">
             <input type="file" id="file-input" style="display:none" accept="image/*, .pdf">
             <div class="input-capsule">
-                <button class="capsule-btn" onclick="document.getElementById('file-input').click()" title="Dosya veya Görsel Ekle">＋</button>
+                <button class="capsule-btn" onclick="document.getElementById('file-input').click()" title="Dosya Ekle">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </button>
                 
                 <input type="text" id="user-input" placeholder="Kerem'e bir şey sor..." autocomplete="off" onkeypress="if(event.key === 'Enter') mesajGonder()">
                 
@@ -161,7 +162,9 @@ HTML_SAYFASI = """
                     <option value="fast">⚡ Hızlı Mod</option>
                 </select>
                 
-                <button class="capsule-btn" id="mic-btn" title="Sesli Konuş">🎤</button>
+                <button class="capsule-btn" id="mic-btn" title="Sesli Konuş">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                </button>
             </div>
             <div class="disclaimer-text">Kerem AI bir yapay zeka modeli olduğu için hata yapabilir.</div>
         </div>
@@ -175,14 +178,14 @@ HTML_SAYFASI = """
         let currentSessionId = deviceId + "_" + Date.now();
         let isFirstMessage = true;
 
-        let voiceChatMode = false;
         const micBtn = document.getElementById("mic-btn");
         const userInput = document.getElementById("user-input");
         let recognition;
         let isListening = false;
-        let otonomSpeechLang = 'tr-TR';
+        let isSpeaking = false;
+        let currentSpeakingBtn = null;
 
-        // --- TEMA DEGISTIRICI ---
+        // TEMA YÖNETİMİ
         const kaydedilenTema = localStorage.getItem("kerem_theme") || "dark";
         if (kaydedilenTema === "light") {
             document.body.setAttribute('data-theme', 'light');
@@ -206,24 +209,9 @@ HTML_SAYFASI = """
             }
         }
 
-        function toggleVoiceChat() {
-            voiceChatMode = !voiceChatMode;
-            const btn = document.getElementById("voice-chat-btn");
-            if(voiceChatMode) {
-                btn.innerHTML = '🔴 Sesli Sohbet: AÇIK';
-                btn.classList.add('active');
-                if(recognition) { try { recognition.lang = otonomSpeechLang; recognition.start(); } catch(e){} }
-            } else {
-                btn.innerHTML = '🎙️ Sesli Sohbet: KAPALI';
-                btn.classList.remove('active');
-                if(recognition) recognition.stop();
-                window.speechSynthesis.cancel();
-            }
-        }
-
         function detectLanguage(text) {
             if (/[\u0600-\u06FF]/.test(text)) return 'ar-SA';
-            const englishWords = ['the', 'and', 'you', 'is', 'a', 'to', 'it', 'that', 'with', 'for', 'story', 'what', 'how'];
+            const englishWords = ['the', 'and', 'you', 'is', 'a', 'to', 'it', 'that', 'with', 'for'];
             const words = text.toLowerCase().split(/\s+/);
             if (words.some(w => englishWords.includes(w))) return 'en-US';
             return 'tr-TR';
@@ -233,32 +221,41 @@ HTML_SAYFASI = """
             return text.replace(/[*#`~_]/g, '');
         }
 
-        function sesliOkuMetin(metin, autoRestartMic = false) {
-            window.speechSynthesis.cancel();
-            const temizMetin = stripMarkdown(metin);
-            const s = new SpeechSynthesisUtterance(temizMetin);
-            
-            otonomSpeechLang = detectLanguage(temizMetin);
-            s.lang = otonomSpeechLang;
-            
-            s.onend = () => {
-                if(voiceChatMode && autoRestartMic) {
-                    setTimeout(() => { try { recognition.lang = otonomSpeechLang; recognition.start(); } catch(e){} }, 300);
-                }
-            };
-            s.onerror = () => { if(voiceChatMode && autoRestartMic) { try { recognition.start(); } catch(e){} } };
-            window.speechSynthesis.speak(s);
-        }
-
+        // AKILLI SESLENDİRME (DURDURMA DESTEKLİ)
         function sesliOkuElement(btn) {
             const wrapper = btn.closest('.message-wrapper');
             const botMsg = wrapper.querySelector('.bot-msg');
+            
+            if (isSpeaking && currentSpeakingBtn === btn) {
+                window.speechSynthesis.cancel();
+                btn.innerHTML = '🔊 Dinle';
+                isSpeaking = false;
+                currentSpeakingBtn = null;
+                return;
+            }
+
+            // Başka bir şey çalıyorsa sustur
+            window.speechSynthesis.cancel();
+            document.querySelectorAll('.btn-dinle').forEach(b => b.innerHTML = '🔊 Dinle');
+
             if (botMsg) {
-                const textToRead = botMsg.innerText.replace(/🔊 Dinle/g, "").trim();
-                sesliOkuMetin(textToRead, false);
+                const textToRead = botMsg.innerText.replace(/🔊 Dinle/g, "").replace(/⏹️ Durdur/g, "").trim();
+                
+                btn.innerHTML = '⏹️ Durdur';
+                isSpeaking = true;
+                currentSpeakingBtn = btn;
+
+                const s = new SpeechSynthesisUtterance(stripMarkdown(textToRead));
+                s.lang = detectLanguage(textToRead);
+                
+                s.onend = () => { btn.innerHTML = '🔊 Dinle'; isSpeaking = false; currentSpeakingBtn = null; };
+                s.onerror = () => { btn.innerHTML = '🔊 Dinle'; isSpeaking = false; currentSpeakingBtn = null; };
+                
+                window.speechSynthesis.speak(s);
             }
         }
 
+        // AKILLI MİKROFON
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -294,17 +291,12 @@ HTML_SAYFASI = """
                 isListening = false; 
                 micBtn.classList.remove("listening"); 
                 userInput.placeholder = "Kerem'e bir şey sor..."; 
-                
-                if (userInput.value.trim() !== "") {
-                    mesajGonder(); 
-                } else if (voiceChatMode) {
-                    setTimeout(() => { try { recognition.lang = otonomSpeechLang; recognition.start(); } catch(e){} }, 300);
-                }
+                if (userInput.value.trim() !== "") mesajGonder(); 
             };
             
             micBtn.onclick = () => { 
                 if (isListening) recognition.stop();
-                else { try { recognition.lang = otonomSpeechLang; recognition.start(); } catch(e){} }
+                else { try { recognition.start(); } catch(e){} }
             };
         } else { micBtn.style.display = "none"; }
 
@@ -334,9 +326,6 @@ HTML_SAYFASI = """
                 data.mesajlar.forEach(msg => {
                     container.innerHTML += `<div class="message-wrapper"><div class="message ${msg.role==='user'?'user-msg':'bot-msg'}">${msg.role==='user'?msg.text:marked.parse(msg.text)}</div></div>`;
                 });
-                if(data.mesajlar.length > 0) {
-                    otonomSpeechLang = detectLanguage(data.mesajlar[data.mesajlar.length - 1].text);
-                }
                 container.scrollTop = container.scrollHeight;
             } catch(e) { container.innerHTML = '<div style="color:#ff5252;">Hata oluştu.</div>'; }
         }
@@ -365,8 +354,6 @@ HTML_SAYFASI = """
             const chat = document.getElementById("chat-container");
             chat.innerHTML += `<div class="message-wrapper"><div class="message user-msg">${currentMsg}</div></div>`;
             
-            otonomSpeechLang = detectLanguage(currentMsg);
-            
             const formData = new FormData();
             formData.append("mesaj", currentMsg);
             formData.append("session_id", currentSessionId); 
@@ -374,7 +361,7 @@ HTML_SAYFASI = """
             if (fileInput.files.length > 0) formData.append("dosya", fileInput.files[0]);
             
             userInput.value = ""; fileInput.value = "";
-            userInput.disabled = true;
+            userInput.disabled = true; 
             
             const aiMode = document.getElementById("ai-mode").value;
             const waitingText = aiMode === "fast" ? "Hızla yanıtlanıyor..." : "Kerem düşünüyor...";
@@ -388,19 +375,15 @@ HTML_SAYFASI = """
                 const data = await response.json();
                 const botBox = document.getElementById(typingId);
                 
-                otonomSpeechLang = detectLanguage(data.cevap);
-                
-                if(voiceChatMode) { sesliOkuMetin(data.cevap, true); }
-                
                 botBox.innerHTML = "";
                 await daktiloEfekti(botBox, data.cevap);
                 
-                botBox.innerHTML += `<div class="msg-actions"><button class="action-icon" onclick="sesliOkuElement(this)">🔊 Dinle</button></div>`;
+                botBox.innerHTML += `<div class="msg-actions"><button class="action-icon btn-dinle" onclick="sesliOkuElement(this)">🔊 Dinle</button></div>`;
                 if(isFirstMessage) { sohbetleriYukle(); isFirstMessage = false; }
             } catch (error) { document.getElementById(typingId).innerHTML = "Bağlantı hatası."; }
             
             userInput.disabled = false;
-            if(!voiceChatMode) userInput.focus();
+            userInput.focus();
         }
     </script>
 </body>
