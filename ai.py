@@ -46,11 +46,11 @@ Kesinlikle Uyman Gereken Kodlama Kuralları:
 """
 
 def ask_ai(mesaj, user_id="default_user", image_path=None):
-    # 1. Geçmiş hafızayı getir
-    gecmis = hafizadan_getir(user_id)
+    # 1. Geçmiş hafızayı getir (Mevcut mesaj ile anlamsal/vektörel arama yapılıyor)
+    gecmis = hafizadan_getir(mesaj)
     
-    # 2. Yeni mesajı hafızaya ekle
-    hafizaya_ekle(user_id, "user", mesaj)
+    # 2. Yeni mesajı hafızaya ekle (kaynak_adi parametresine user_id atanıyor)
+    hafizaya_ekle(mesaj, kaynak_adi=user_id)
     
     # Tüm içeriği topla
     contents = []
@@ -95,7 +95,7 @@ def ask_ai(mesaj, user_id="default_user", image_path=None):
         cevap = response.text
         
         # Cevabı hafızaya al ve döndür
-        hafizaya_ekle(user_id, "model", cevap)
+        hafizaya_ekle(cevap, kaynak_adi=user_id)
         return cevap
 
     # 4. YEDEK MOTOR (Ollama - Ngrok)
@@ -111,7 +111,7 @@ def ask_ai(mesaj, user_id="default_user", image_path=None):
             res = requests.post(NGROK_LINK, json=payload, timeout=60)
             if res.status_code == 200:
                 cevap = res.json().get("response", "Yerel model yanıt veremedi.")
-                hafizaya_ekle(user_id, "model", cevap)
+                hafizaya_ekle(cevap, kaynak_adi=user_id)
                 return cevap
             else:
                 return f"Yedek motor hata verdi. (Kod: {res.status_code})"

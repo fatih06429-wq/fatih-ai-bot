@@ -1,6 +1,7 @@
 import os
 import sys
 from google import genai
+import chromadb
 
 # RENDER YAMASI: Eski SQLite hatasını atlamak için sanal kütüphane yönlendirmesi
 try:
@@ -8,8 +9,6 @@ try:
     sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 except ImportError:
     pass
-
-import chromadb
 
 CHROMA_DATA_PATH = "vektor_hafiza"
 os.makedirs(CHROMA_DATA_PATH, exist_ok=True)
@@ -98,3 +97,33 @@ def hafizadan_getir(soru, n_sonuc=3):
     except Exception as e:
         print(f"Hafızadan okuma hatası: {e}")
         return ""
+
+def hafizayi_temizle(kaynak_adi=None):
+    """
+    Belirli bir oturuma veya kullanıcıya ait vektörleri siler. 
+    Eğer kaynak_adi verilmezse tüm koleksiyonu tamamen sıfırlar.
+    """
+    global _client, _koleksiyon
+    try:
+        # Eğer client henüz başlatılmamışsa, başlat
+        if _client is None:
+            _client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
+        
+        if kaynak_adi:
+            # Sadece belirli bir kullanıcıya/oturuma ait vektörleri meta veri ile filtreleyip sil
+            kol = koleksiyonu_getir()
+            kol.delete(where={"kaynak": kaynak_adi})
+            print(f"✅ '{kaynak_adi}' adlı kullanıcı/oturum için hafıza başarıyla temizlendi!")
+        else:
+            # Tüm veritabanını tamamen uçur
+            _client.delete_collection(name="kerem_bilgi_bankasi")
+            _koleksiyon = None 
+            print("✅ Tüm hafıza başarıyla tamamen temizlendi!")
+            
+        return True
+    except ValueError:
+        print("⚠️ Silinecek bir hafıza zaten bulunamadı (Koleksiyon boş veya yok).")
+        return True
+    except Exception as e:
+        print(f"Hafıza temizleme hatası: {e}")
+        return False

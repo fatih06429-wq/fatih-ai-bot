@@ -6,7 +6,10 @@ from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
-from ai import ask_ai, hafizayi_temizle
+
+# DEĞİŞİKLİK BURADA: hafizayi_temizle doğrudan hafiza.py'den çekiliyor.
+from ai import ask_ai
+from hafiza import hafizayi_temizle
 from firebase_admin import firestore
 
 app = Flask(__name__)
@@ -176,7 +179,6 @@ HTML_SAYFASI = """
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
                 </button>
                 
-                <!-- YENİ: GÖNDER BUTONU EKLENDİ -->
                 <button class="capsule-btn" onclick="mesajGonder()" title="Mesajı Gönder">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                 </button>
