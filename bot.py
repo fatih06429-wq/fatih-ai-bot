@@ -13,7 +13,7 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# SENİN ORİJİNAL, KUSURSUZ TASARIMIN BURADA
+# TAM TASARIMLI ARAYÜZ (sidebar, karanlık mod, bas-konuş, daktilo, tümünü sil)
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -60,15 +60,19 @@ HTML_SAYFASI = """
             display: flex; 
             overflow: hidden; 
             transition: background-color 0.3s, color 0.3s; 
+            -webkit-user-select: none; /* Metin seçimini engeller (bas-konuş için) */
+            user-select: none;
         }
         
+        /* Input gibi yerlerde metin seçimi serbest olsun */
+        input, .message { -webkit-user-select: text; user-select: text; }
+
         .sidebar { width: 260px; background-color: var(--sidebar-bg); border-right: 1px solid var(--bot-border); display: flex; flex-direction: column; padding: 15px; z-index: 20;}
         .new-chat-btn { background-color: var(--hover-bg); border: 1px solid var(--bot-border); color: var(--text-color); padding: 12px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: 600; margin-bottom: 20px; transition: 0.2s; width: 100%; box-sizing: border-box;}
         .new-chat-btn:hover { border-color: var(--accent); }
-        .history-list { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; flex: 1; }
+        .history-list { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; flex: 1; padding-right: 5px; }
         
-        /* Geçmiş Sohbet Satırı ve Silme Butonu Uyumu */
-        .history-row { display: flex; align-items: center; justify-content: space-between; border-radius: 8px; transition: 0.2s; padding-right: 5px; }
+        .history-row { display: flex; align-items: center; justify-content: space-between; border-radius: 8px; transition: 0.2s; }
         .history-row:hover, .history-row.active { background-color: var(--hover-bg); }
         .history-item { background: transparent; border: none; color: var(--text-color); padding: 10px; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; font-size: 14px; }
         .history-row.active .history-item { font-weight: bold; border-left: 3px solid var(--accent); border-radius: 0; }
@@ -102,7 +106,8 @@ HTML_SAYFASI = """
         
         .spinner { width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s infinite; display: inline-block;}
         @keyframes spin { 100% { transform: rotate(360deg); } }
-        .listening { animation: pulse-mic 1.5s infinite; color: #ff5252 !important; }
+        .listening { animation: pulse-mic 1s infinite; background-color: #ff5252 !important; color: white !important; }
+        @keyframes pulse-mic { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
 
         #input-container { padding: 10px 15% 25px 15%; background-color: var(--bg-color); display: flex; flex-direction: column; align-items: center; transition: background-color 0.3s; }
         .input-capsule { display: flex; background-color: var(--input-bg); border: 1px solid var(--input-border); border-radius: 35px; padding: 6px 14px 6px 14px; align-items: center; width: 100%; max-width: 750px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: 0.3s; }
@@ -127,7 +132,10 @@ HTML_SAYFASI = """
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 
             Yeni Sohbet
         </button>
-        <div style="font-size:12px; color:#888; margin-bottom:10px; font-weight:bold; padding-left:5px;">GEÇMİŞ SOHBETLER</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 0 5px;">
+            <div style="font-size:12px; color:#888; font-weight:bold;">GEÇMİŞ SOHBETLER</div>
+            <button onclick="tumSohbetleriSil()" style="background:transparent; border:none; color:#ff5252; cursor:pointer; font-size:12px; opacity:0.8; font-weight:bold;" title="Tüm Sohbetleri Sil">🗑️ Tümünü Sil</button>
+        </div>
         <div class="history-list" id="sidebar-list"></div>
     </div>
 
@@ -165,7 +173,7 @@ HTML_SAYFASI = """
                     <option value="fast">⚡ Hızlı Mod</option>
                 </select>
                 
-                <button class="capsule-btn" id="mic-btn" title="Sesli Konuş">
+                <button class="capsule-btn" id="mic-btn" title="Basılı Tutarak Konuş">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
                 </button>
             </div>
@@ -192,9 +200,6 @@ HTML_SAYFASI = """
         if (kaydedilenTema === "light") {
             document.body.setAttribute('data-theme', 'light');
             document.getElementById("theme-btn").innerHTML = '🌙';
-        } else {
-            document.body.removeAttribute('data-theme');
-            document.getElementById("theme-btn").innerHTML = '☀️';
         }
 
         function temaDegistir() {
@@ -211,17 +216,7 @@ HTML_SAYFASI = """
             }
         }
 
-        function detectLanguage(text) {
-            if (/[\u0600-\u06FF]/.test(text)) return 'ar-SA';
-            const englishWords = ['the', 'and', 'you', 'is', 'a', 'to', 'it', 'that', 'with', 'for'];
-            const words = text.toLowerCase().split(/\s+/);
-            if (words.some(w => englishWords.includes(w))) return 'en-US';
-            return 'tr-TR';
-        }
-
-        function stripMarkdown(text) {
-            return text.replace(/[*#`~_]/g, '');
-        }
+        function stripMarkdown(text) { return text.replace(/[*#`~_]/g, ''); }
 
         function sesliOkuElement(btn) {
             const wrapper = btn.closest('.message-wrapper');
@@ -243,15 +238,14 @@ HTML_SAYFASI = """
                 btn.innerHTML = '⏹️ Durdur';
                 isSpeaking = true;
                 currentSpeakingBtn = btn;
-
                 const s = new SpeechSynthesisUtterance(stripMarkdown(textToRead));
-                s.lang = detectLanguage(textToRead);
-                s.onend = () => { btn.innerHTML = '🔊 Dinle'; isSpeaking = false; currentSpeakingBtn = null; };
-                s.onerror = () => { btn.innerHTML = '🔊 Dinle'; isSpeaking = false; currentSpeakingBtn = null; };
+                s.lang = 'tr-TR';
+                s.onend = s.onerror = () => { btn.innerHTML = '🔊 Dinle'; isSpeaking = false; currentSpeakingBtn = null; };
                 window.speechSynthesis.speak(s);
             }
         }
 
+        // --- BAS KONUŞ (PUSH TO TALK) YAPISI ---
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -262,24 +256,18 @@ HTML_SAYFASI = """
             recognition.onstart = () => { 
                 isListening = true; 
                 micBtn.classList.add("listening"); 
-                userInput.placeholder = "Dinliyorum, konuşun..."; 
+                userInput.placeholder = "Dinliyorum, konuşun ve bırakın..."; 
             };
             
             recognition.onresult = (e) => { 
                 let interimTranscript = '';
                 let finalTranscript = '';
                 for (let i = e.resultIndex; i < e.results.length; ++i) {
-                    if (e.results[i].isFinal) {
-                        finalTranscript += e.results[i][0].transcript;
-                    } else {
-                        interimTranscript += e.results[i][0].transcript;
-                    }
+                    if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+                    else interimTranscript += e.results[i][0].transcript;
                 }
-                if(finalTranscript) {
-                    userInput.value = (userInput.value + " " + finalTranscript).trim();
-                } else if(interimTranscript) {
-                    userInput.placeholder = interimTranscript; 
-                }
+                if(finalTranscript) userInput.value = (userInput.value + " " + finalTranscript).trim();
+                else if(interimTranscript) userInput.placeholder = interimTranscript; 
             };
             
             recognition.onend = () => { 
@@ -289,13 +277,19 @@ HTML_SAYFASI = """
                 if (userInput.value.trim() !== "") mesajGonder(); 
             };
             
-            micBtn.onclick = () => { 
-                if (isListening) recognition.stop();
-                else { try { recognition.start(); } catch(e){} }
-            };
+            const startRecord = (e) => { e.preventDefault(); if(!isListening) { try { recognition.start(); } catch(err){} } };
+            const stopRecord = (e) => { e.preventDefault(); if(isListening) { recognition.stop(); } };
+
+            // Fare ve Dokunmatik Kontrolleri
+            micBtn.addEventListener('mousedown', startRecord);
+            micBtn.addEventListener('mouseup', stopRecord);
+            micBtn.addEventListener('mouseleave', stopRecord); // Fare butondan çıkarsa durdur
+            micBtn.addEventListener('touchstart', startRecord);
+            micBtn.addEventListener('touchend', stopRecord);
+            
         } else { micBtn.style.display = "none"; }
 
-        // SOHBETLERİ SİLME DESTEKLİ SIDEBAR YÜKLEYİCİ
+        // SOHBET YÜKLEYİCİ
         async function sohbetleriYukle() {
             try {
                 const res = await fetch('/api/sohbetler?user_id=' + deviceId);
@@ -309,7 +303,7 @@ HTML_SAYFASI = """
                     row.className = `history-row ${s.id===currentSessionId?'active':''}`;
                     row.innerHTML = `
                         <button class="history-item" onclick="sohbetAc('${s.id}', this.parentElement)">${s.baslik}</button>
-                        <button class="delete-btn" onclick="sohbetSil('${s.id}', event)" title="Sohbeti Kalıcı Olarak Sil">
+                        <button class="delete-btn" onclick="sohbetSil('${s.id}', event)" title="Sohbeti Sil">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                         </button>
                     `;
@@ -319,22 +313,30 @@ HTML_SAYFASI = """
         }
         window.onload = sohbetleriYukle;
 
-        // KALICI SOHBET SİLME FONKSİYONU (BELLEK BOŞALTICI)
+        // TEKLİ SİLME
         async function sohbetSil(sessionId, event) {
-            event.stopPropagation(); // Satır tıklama olayını engelle
-            if(!confirm("Bu sohbet geçmişini kalıcı olarak silmek ve belleği boşaltmak istiyor musunuz?")) return;
-            
+            event.stopPropagation();
+            if(!confirm("Bu sohbet geçmişini silmek istiyor musunuz?")) return;
             try {
                 const res = await fetch(`/api/sohbet/sil?session_id=${sessionId}`, { method: 'DELETE' });
                 const data = await res.json();
                 if(data.status === "success") {
-                    if(currentSessionId === sessionId) {
-                        yeniSohbet();
-                    } else {
-                        sohbetleriYukle();
-                    }
+                    if(currentSessionId === sessionId) yeniSohbet();
+                    else sohbetleriYukle();
                 }
-            } catch(e) { alert("Silme işlemi sırasında bir hata oluştu."); }
+            } catch(e) { alert("Hata oluştu."); }
+        }
+
+        // TÜMÜNÜ SİLME
+        async function tumSohbetleriSil() {
+            if(!confirm("Tüm sohbet geçmişini kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) return;
+            try {
+                const res = await fetch(`/api/sohbet/sil-tum?user_id=${deviceId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if(data.status === "success") {
+                    yeniSohbet(); // Ekranı ve hafızayı temizler
+                }
+            } catch(e) { alert("Silme işlemi sırasında hata oluştu."); }
         }
 
         async function sohbetAc(id, rowElement) {
@@ -386,11 +388,8 @@ HTML_SAYFASI = """
             userInput.value = ""; fileInput.value = "";
             userInput.disabled = true; 
             
-            const aiMode = document.getElementById("ai-mode").value;
-            const waitingText = aiMode === "fast" ? "Hızla yanıtlanıyor..." : "Kerem düşünüyor...";
-            
             const typingId = "type-" + Date.now();
-            chat.innerHTML += `<div class="message-wrapper"><div id="${typingId}" class="message bot-msg"><div class="spinner"></div> ${waitingText}</div></div>`;
+            chat.innerHTML += `<div class="message-wrapper"><div id="${typingId}" class="message bot-msg"><div class="spinner"></div> Kerem düşünüyor...</div></div>`;
             chat.scrollTop = chat.scrollHeight;
             
             try {
@@ -400,7 +399,6 @@ HTML_SAYFASI = """
                 
                 botBox.innerHTML = "";
                 await daktiloEfekti(botBox, data.cevap);
-                
                 botBox.innerHTML += `<div class="msg-actions"><button class="action-icon btn-dinle" onclick="sesliOkuElement(this)">🔊 Dinle</button></div>`;
                 if(isFirstMessage) { sohbetleriYukle(); isFirstMessage = false; }
             } catch (error) { document.getElementById(typingId).innerHTML = "Bağlantı hatası."; }
@@ -444,6 +442,21 @@ def sohbet_sil():
         return jsonify({"status": "success"})
     except: return jsonify({"status": "error"}), 500
 
+# YENİ EKLENEN: TÜM SOHBETLERİ SİLME ENDPOINT'İ
+@app.route("/api/sohbet/sil-tum", methods=["DELETE"])
+def sohbet_sil_tum():
+    user_id = request.args.get("user_id")
+    if not user_id: return jsonify({"status": "error"}), 400
+    try:
+        db_client = firestore.client()
+        docs = db_client.collection("web_sohbetler").where("user_id", "==", user_id).stream()
+        for doc in docs:
+            doc.reference.delete()
+            hafizayi_temizle(doc.id)
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route("/api/sor", methods=["POST"])
 def soru_cevapla():
     mesaj = request.form.get("mesaj", "")
@@ -453,6 +466,7 @@ def soru_cevapla():
     if 'dosya' in request.files and request.files['dosya'].filename:
         dosya_yolu = os.path.join(UPLOAD_FOLDER, secure_filename(request.files['dosya'].filename))
         request.files['dosya'].save(dosya_yolu)
+    
     cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu)
     if dosya_yolu and os.path.exists(dosya_yolu): os.remove(dosya_yolu)
     
@@ -493,11 +507,8 @@ def run_telegram_bot():
 
 # --- Uygulama Başlatma ---
 if __name__ == '__main__':
-    # Flask arka planda çalışacak
     def run_flask():
         app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), use_reloader=False)
     
     threading.Thread(target=run_flask, daemon=True).start()
-    
-    # Telegram botu main thread'de çalışacak
     run_telegram_bot()
