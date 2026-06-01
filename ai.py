@@ -10,6 +10,7 @@ import datetime
 from hafiza import hafizaya_ekle, hafizadan_getir
 import firebase_admin
 from firebase_admin import credentials, firestore
+from scrapers import aof_duyurulari_cek
 
 # --- AYARLAR ---
 NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate"
@@ -53,6 +54,13 @@ def fallback_ollama(mesaj):
         return f"Yedek motor meşgul. (Hata: {response.status_code})"
     except Exception as e:
         return f"Bağlantı hatası: {e}"
+
+def ask_ai(text, user_id, image_path=None):
+    # Eğer kullanıcı AÖF ile ilgili bir şey soruyorsa scraper'ı tetikle
+    if "aöf" in text.lower() and ("duyuru" in text.lower() or "sınav" in text.lower() or "takvim" in text.lower()):
+        duyuru_bilgisi = aof_duyurulari_cek()
+        text = f"Anadolu AÖF'ten alınan güncel duyurular:\n{duyuru_bilgisi}\n\nKullanıcı sorusu: {text}"
+    
 
 def ask_ai(text, user_id, image_path=None):
     bugun = datetime.datetime.now().strftime("%d %B %Y")
