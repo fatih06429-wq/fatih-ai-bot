@@ -1,4 +1,13 @@
 import os
+import sys
+
+# RENDER YAMASI: Eski SQLite hatasını atlamak için sanal kütüphane yönlendirmesi
+try:
+    __import__('pysqlite3')
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass
+
 import chromadb
 from chromadb.utils import embedding_functions
 

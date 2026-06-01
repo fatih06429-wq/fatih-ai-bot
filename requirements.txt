@@ -1,11 +1,13 @@
+flask
 requests
 google-genai
-pillow
 duckduckgo-search
 firebase-admin
-python-telegram-bot
-openai-whisper
-Flask==3.0.3
 pymupdf
+python-telegram-bot
+pillow
+pysqlite3-binary
 chromadb
 sentence-transformers
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
