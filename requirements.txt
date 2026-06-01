@@ -7,3 +7,5 @@ python-telegram-bot
 openai-whisper
 Flask==3.0.3
 pymupdf
+chromadb
+sentence-transformers
