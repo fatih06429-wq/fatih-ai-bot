@@ -13,7 +13,7 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# TAM TASARIMLI ARAYÜZ (sidebar, karanlık mod, bas-konuş, daktilo, tümünü sil)
+# TAM TASARIMLI ARAYÜZ (Dosya yükleme uyarıları ve Gönder Butonu eklendi)
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -60,11 +60,10 @@ HTML_SAYFASI = """
             display: flex; 
             overflow: hidden; 
             transition: background-color 0.3s, color 0.3s; 
-            -webkit-user-select: none; /* Metin seçimini engeller (bas-konuş için) */
+            -webkit-user-select: none;
             user-select: none;
         }
         
-        /* Input gibi yerlerde metin seçimi serbest olsun */
         input, .message { -webkit-user-select: text; user-select: text; }
 
         .sidebar { width: 260px; background-color: var(--sidebar-bg); border-right: 1px solid var(--bot-border); display: flex; flex-direction: column; padding: 15px; z-index: 20;}
@@ -176,6 +175,11 @@ HTML_SAYFASI = """
                 <button class="capsule-btn" id="mic-btn" title="Basılı Tutarak Konuş">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
                 </button>
+                
+                <!-- YENİ: GÖNDER BUTONU EKLENDİ -->
+                <button class="capsule-btn" onclick="mesajGonder()" title="Mesajı Gönder">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
             </div>
             <div class="disclaimer-text">Kerem AI bir yapay zeka modeli olduğu için hata yapabilir.</div>
         </div>
@@ -191,6 +195,7 @@ HTML_SAYFASI = """
 
         const micBtn = document.getElementById("mic-btn");
         const userInput = document.getElementById("user-input");
+        const fileInput = document.getElementById("file-input");
         let recognition;
         let isListening = false;
         let isSpeaking = false;
@@ -201,6 +206,15 @@ HTML_SAYFASI = """
             document.body.setAttribute('data-theme', 'light');
             document.getElementById("theme-btn").innerHTML = '🌙';
         }
+
+        // YENİ: Dosya seçildiğinde kullanıcıyı bilgilendir
+        fileInput.addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name;
+            if (fileName) {
+                userInput.placeholder = "📎 " + fileName + " seçildi (Gönder'e bas)...";
+                userInput.focus();
+            }
+        });
 
         function temaDegistir() {
             const body = document.body;
@@ -245,7 +259,6 @@ HTML_SAYFASI = """
             }
         }
 
-        // --- BAS KONUŞ (PUSH TO TALK) YAPISI ---
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -280,16 +293,14 @@ HTML_SAYFASI = """
             const startRecord = (e) => { e.preventDefault(); if(!isListening) { try { recognition.start(); } catch(err){} } };
             const stopRecord = (e) => { e.preventDefault(); if(isListening) { recognition.stop(); } };
 
-            // Fare ve Dokunmatik Kontrolleri
             micBtn.addEventListener('mousedown', startRecord);
             micBtn.addEventListener('mouseup', stopRecord);
-            micBtn.addEventListener('mouseleave', stopRecord); // Fare butondan çıkarsa durdur
+            micBtn.addEventListener('mouseleave', stopRecord); 
             micBtn.addEventListener('touchstart', startRecord);
             micBtn.addEventListener('touchend', stopRecord);
             
         } else { micBtn.style.display = "none"; }
 
-        // SOHBET YÜKLEYİCİ
         async function sohbetleriYukle() {
             try {
                 const res = await fetch('/api/sohbetler?user_id=' + deviceId);
@@ -313,7 +324,6 @@ HTML_SAYFASI = """
         }
         window.onload = sohbetleriYukle;
 
-        // TEKLİ SİLME
         async function sohbetSil(sessionId, event) {
             event.stopPropagation();
             if(!confirm("Bu sohbet geçmişini silmek istiyor musunuz?")) return;
@@ -327,14 +337,13 @@ HTML_SAYFASI = """
             } catch(e) { alert("Hata oluştu."); }
         }
 
-        // TÜMÜNÜ SİLME
         async function tumSohbetleriSil() {
             if(!confirm("Tüm sohbet geçmişini kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) return;
             try {
                 const res = await fetch(`/api/sohbet/sil-tum?user_id=${deviceId}`, { method: 'DELETE' });
                 const data = await res.json();
                 if(data.status === "success") {
-                    yeniSohbet(); // Ekranı ve hafızayı temizler
+                    yeniSohbet(); 
                 }
             } catch(e) { alert("Silme işlemi sırasında hata oluştu."); }
         }
@@ -372,12 +381,21 @@ HTML_SAYFASI = """
         async function mesajGonder() {
             const currentMsg = userInput.value;
             const fileInput = document.getElementById("file-input");
+            
+            // Eğer hem mesaj boşsa hem dosya yoksa işlem yapma
             if (!currentMsg.trim() && fileInput.files.length === 0) return;
             
             if (isFirstMessage) { document.getElementById("welcome-screen").style.display = "none"; }
             
             const chat = document.getElementById("chat-container");
-            chat.innerHTML += `<div class="message-wrapper"><div class="message user-msg">${currentMsg}</div></div>`;
+            
+            // YENİ: Ekrana yazdırılacak metni hazırla (Dosya varsa göster)
+            let displayMsg = currentMsg;
+            if (fileInput.files.length > 0) {
+                displayMsg = "📎 <b>" + fileInput.files[0].name + "</b>" + (currentMsg ? "<br>" + currentMsg : "");
+            }
+            
+            chat.innerHTML += `<div class="message-wrapper"><div class="message user-msg">${displayMsg}</div></div>`;
             
             const formData = new FormData();
             formData.append("mesaj", currentMsg);
@@ -386,6 +404,7 @@ HTML_SAYFASI = """
             if (fileInput.files.length > 0) formData.append("dosya", fileInput.files[0]);
             
             userInput.value = ""; fileInput.value = "";
+            userInput.placeholder = "Kerem'e bir şey sor..."; // Placeholder'ı sıfırla
             userInput.disabled = true; 
             
             const typingId = "type-" + Date.now();
@@ -466,6 +485,10 @@ def soru_cevapla():
         dosya_yolu = os.path.join(UPLOAD_FOLDER, secure_filename(request.files['dosya'].filename))
         request.files['dosya'].save(dosya_yolu)
     
+    # YENİ: Sadece dosya gönderilip metin yazılmamışsa, yapay zekanın çökmemesi için default metin ekle.
+    if dosya_yolu and not mesaj.strip():
+        mesaj = "Lütfen gönderdiğim bu dosyayı/görseli incele ve detaylıca açıkla."
+
     cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu)
     if dosya_yolu and os.path.exists(dosya_yolu): os.remove(dosya_yolu)
     
