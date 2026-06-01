@@ -12,7 +12,8 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # --- AYARLAR ---
-NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate"
+# DİKKAT: Ngrok'u her açtığında buradaki linki yenilemen gerekir!
+NGROK_LINK = "https://3EVktsoeNsWpqo2Pjlhkdr6EQmt_3Si4LNKXBD63buxzxu2JU.ngrok-free.dev/api/generate"
 
 try:
     firebase_json = os.environ.get("FIREBASE_JSON")
@@ -42,14 +43,18 @@ def internette_ara(sorgu):
 
 def fallback_ollama(mesaj):
     try:
-        sistem_talimati = """Sen Kerem AI'sın. Çok dilli (multilingual), profesyonel bir asistansın.
-        Kullanıcı sana hangi dilde soru soruyorsa, o dilde kısa ve net cevap ver."""
+        sistem_talimati = """Sen Kerem AI'sın. Çok dilli (multilingual), profesyonel bir asistansın."""
         payload = {"model": "qwen2.5:7b", "prompt": f"{sistem_talimati}\n\nSoru: {mesaj}", "stream": False}
         headers = {"ngrok-skip-browser-warning": "true", "Content-Type": "application/json"}
         
         response = requests.post(NGROK_LINK, json=payload, headers=headers, timeout=120)
         if response.status_code == 200:
             return f"*(Yerel Sistem)*\n{response.json().get('response', '')}"
+        
+        # 404 veya 502 hatalarında kullanıcıyı bilgilendir
+        if response.status_code == 404 or response.status_code == 502:
+             return "Yedek motor bağlantısı koptu. Lütfen sistem yöneticisinden Ngrok linkini güncellemesini isteyin."
+             
         return f"Yedek motor meşgul. (Hata: {response.status_code})"
     except Exception as e:
         return f"Bağlantı hatası: {e}"
@@ -63,16 +68,12 @@ def ask_ai(text, user_id, image_path=None):
             {"role": "model", "parts": [{"text": "Anladım. İstenilen dilde yardımcı olmaya hazırım."}]}
         ]
 
-    # 1. ÖNCE KALICI HAFIZAYA (VEKTÖR DB) BAK
     vektor_bilgisi = hafizadan_getir(text)
-
-    # 2. İNTERNETE BAK (Gerekliyse)
     arama_sonucu = internette_ara(text) if arama_gerekli_mi(text) else ""
     
-    # 3. BAĞLAMI BİRLEŞTİR
     full_text = text
     if arama_sonucu or vektor_bilgisi:
-        full_text = f"Önceki Öğrenilmiş Bilgiler (Hafıza):\n{vektor_bilgisi}\n\nİnternet Verileri:\n{arama_sonucu}\n\nSoru: {text}"
+        full_text = f"Önceki Öğrenilmiş Bilgiler (Hafıza):\n{vektor_bilgisi}\n\nİnternet Verileri:\n{arama_sonucu}\n\nKullanıcının Sorusu: {text}"
 
     try:
         model_contents = []
@@ -80,13 +81,16 @@ def ask_ai(text, user_id, image_path=None):
             if image_path.lower().endswith('.pdf'):
                 doc = fitz.open(image_path)
                 pdf_text = "\n".join([page.get_text() for page in doc])
-                
-                # YENİ ÖZELLİK: PDF'i kalıcı hafızaya kazı!
                 hafizaya_ekle(pdf_text, kaynak_adi=os.path.basename(image_path))
                 
-                model_contents = [f"PDF İÇERİĞİ:\n{pdf_text}\n\nSoru: {full_text}"]
+                # ÇÖZÜM: PDF içeriğini sadece okuma, sohbet geçmişine (kısa hafızaya) de kaydet!
+                pdf_baglami = f"Kullanıcı bir belge yükledi. Belge İçeriği Özeti:\n{pdf_text[:10000]}\n\nKullanıcının Notu: {full_text}"
+                sohbet_gecmisi[user_id].append({"role": "user", "parts": [{"text": pdf_baglami}]})
+                model_contents = sohbet_gecmisi[user_id]
             else:
                 img = PIL.Image.open(image_path)
+                # Görseli de sohbet geçmişine "görsel yüklendi" notuyla ekle
+                sohbet_gecmisi[user_id].append({"role": "user", "parts": [{"text": f"[Kullanıcı bir görsel yükledi] {full_text}"}]})
                 model_contents = [img, full_text]
         else:
             sohbet_gecmisi[user_id].append({"role": "user", "parts": [{"text": full_text}]})
@@ -99,7 +103,8 @@ def ask_ai(text, user_id, image_path=None):
         )
         
         cevap = response.text
-        if not image_path:
+        if not image_path or image_path.lower().endswith('.pdf'):
+            # Modeli cevabını da kısa süreli hafızaya mutlaka yaz
             sohbet_gecmisi[user_id].append({"role": "model", "parts": [{"text": cevap}]})
         
         if db: db.collection("sohbetler").document(str(user_id)).set({"gecmis": sohbet_gecmisi[user_id][-20:]})
