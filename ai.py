@@ -13,20 +13,17 @@ from firebase_admin import credentials, firestore
 # --- AYARLAR ---
 NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate"
 
-# Firebase Başlatma
 try:
     firebase_json = os.environ.get("FIREBASE_JSON")
     cred = credentials.Certificate(json.loads(firebase_json))
     firebase_admin.initialize_app(cred)
     db = firestore.client()
-    print("✅ Firebase Veri Tabanı Bağlantısı Başarılı!")
+    print("✅ Firebase Bağlantısı Başarılı!")
 except Exception as e:
     print(f"❌ Firebase başlatılamadı: {e}")
     db = None
 
 sohbet_gecmisi = {}
-
-# Gemini API Başlatma
 api_key = os.environ.get("GOOGLE_API_KEY")
 client = genai.Client(api_key=api_key)
 uygun_model = "gemini-2.5-flash" 
@@ -42,32 +39,17 @@ def internette_ara(sorgu):
             return "\n".join([f"- {s['title']}: {s['body']}" for s in sonuclar]) if sonuclar else ""
     except: return ""
 
-# GÜNCELLENMİŞ: Ngrok Bypass Headers ve Timeout Uzatması Eklendi
 def fallback_ollama(mesaj):
     try:
-        sistem_talimati = """Sen Kerem AI'sın. Profesyonel, yardımsever, güvenilir bir asistansın.
-        Sorulara Türkçe, kısa, net ve doğrudan cevap ver. 
-        Eğer kod yazman istenirse açıklayıcı ol. Biliyorsan cevapla, bilmiyorsan dürüstçe belirt."""
+        sistem_talimati = """Sen Kerem AI'sın. Çok dilli (multilingual), profesyonel bir asistansın.
+        Kullanıcı sana hangi dilde soru soruyorsa, o dilde kısa ve net cevap ver."""
+        payload = {"model": "qwen2.5:7b", "prompt": f"{sistem_talimati}\n\nSoru: {mesaj}", "stream": False}
+        headers = {"ngrok-skip-browser-warning": "true", "Content-Type": "application/json"}
         
-        payload = {
-            "model": "qwen2.5:7b",
-            "prompt": f"{sistem_talimati}\n\nSoru: {mesaj}",
-            "stream": False
-        }
-        
-        # Ngrok uyarı sayfasını atlamak için hayati önem taşıyan başlıklar
-        headers = {
-            "ngrok-skip-browser-warning": "true",
-            "Content-Type": "application/json"
-        }
-        
-        # Yerel model bazen geç cevap verebilir, timeout'u 120 saniyeye çıkardık
         response = requests.post(NGROK_LINK, json=payload, headers=headers, timeout=120)
-        
         if response.status_code == 200:
-            return f"*(Yerel Sistem Devrede)*\n\n{response.json().get('response', 'Yerel model cevap üretemedi.')}"
-        
-        return f"Yedek motor şu an meşgul. (Hata: {response.status_code})"
+            return f"*(Yerel Sistem)*\n{response.json().get('response', '')}"
+        return f"Yedek motor meşgul. (Hata: {response.status_code})"
     except Exception as e:
         return f"Bağlantı hatası: {e}"
 
@@ -76,8 +58,9 @@ def ask_ai(text, user_id, image_path=None):
     
     if user_id not in sohbet_gecmisi:
         sohbet_gecmisi[user_id] = [
-            {"role": "user", "parts": [{"text": f"Sistem: Bugünün tarihi {bugun}. Sen profesyonel, güvenilir bir asistansın. Türkçe yaz."}]},
-            {"role": "model", "parts": [{"text": "Anladım."}]}
+            # DİKKAT: "Türkçe yaz" kısıtlaması kaldırıldı.
+            {"role": "user", "parts": [{"text": f"Sistem: Bugün {bugun}. Sen dünya çapında her dili bilen profesyonel bir asistansın. Kullanıcı seninle hangi dilde iletişim kurarsa, anadili gibi o dilde yanıt ver."}]},
+            {"role": "model", "parts": [{"text": "Anladım. İstenilen dilde yardımcı olmaya hazırım."}]}
         ]
 
     arama_sonucu = internette_ara(text) if arama_gerekli_mi(text) else ""
@@ -107,8 +90,7 @@ def ask_ai(text, user_id, image_path=None):
         if not image_path:
             sohbet_gecmisi[user_id].append({"role": "model", "parts": [{"text": cevap}]})
         
-        if db:
-            db.collection("sohbetler").document(str(user_id)).set({"gecmis": sohbet_gecmisi[user_id][-20:]})
+        if db: db.collection("sohbetler").document(str(user_id)).set({"gecmis": sohbet_gecmisi[user_id][-20:]})
         return cevap
         
     except Exception as e:
