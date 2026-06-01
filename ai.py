@@ -13,7 +13,7 @@ from firebase_admin import credentials, firestore
 
 # --- AYARLAR ---
 # DİKKAT: Ngrok'u her açtığında buradaki linki yenilemen gerekir!
-NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev -> http://localhost:11434.ngrok-free.dev/api/generate"
+NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate"
 
 try:
     firebase_json = os.environ.get("FIREBASE_JSON")
