@@ -15,7 +15,8 @@ from firebase_admin import credentials, firestore
 from scrapers import aof_duyurulari_cek
 
 # --- AYARLAR VE BAĞLANTILAR ---
-NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate"
+# Yedek motor adresin değiştiyse burayı güncelleyebilirsin (şu an Gemini'yi tamir ettiğimiz için yedeğe düşmeyecek)
+NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate" 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 try:
@@ -43,7 +44,6 @@ Kesinlikle Uyman Gereken Kodlama Kuralları:
 4. ÇÖZÜM ODAKLILIK: Bir hata logu veya bug iletildiğinde, önce sorunun kaynağını algoritmik olarak düşün, sonra doğrudan çözüme odaklan.
 """
 
-# PARAMETRE GÜNCELLEMESİ: mode eklendi
 def ask_ai(mesaj, user_id="default_user", image_path=None, mode="thinking"):
     gecmis = hafizadan_getir(mesaj)
     hafizaya_ekle(mesaj, kaynak_adi=user_id)
@@ -70,13 +70,13 @@ def ask_ai(mesaj, user_id="default_user", image_path=None, mode="thinking"):
     tam_metin = f"Önceki Bağlam:\n{gecmis}\n\nKullanıcının Yeni Mesajı: {mesaj}"
     contents.append(tam_metin)
 
-    # MOD SEÇİMİNE GÖRE MOTOR VE SICAKLIK AYARI
+    # ÇÖZÜM BURADA: API'nin kabul ettiği "-latest" takılı ve yeni nesil model isimleri güncellendi
     if mode == "fast":
-        secilen_model = 'gemini-1.5-flash'
-        sicaklik = 0.5 # Hızlı modda standart esneklik
+        secilen_model = 'gemini-2.0-flash' # Hızlı ve kodlamada çok yetenekli güncel sürüm
+        sicaklik = 0.5 
     else:
-        secilen_model = 'gemini-1.5-pro'
-        sicaklik = 0.2 # Kodlama ve derin analiz için halüsinasyonu engelleyen düşük sıcaklık
+        secilen_model = 'gemini-1.5-pro-latest' # 404 hatasını çözen "-latest" takılı derin analiz sürümü
+        sicaklik = 0.2 
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
@@ -97,7 +97,6 @@ def ask_ai(mesaj, user_id="default_user", image_path=None, mode="thinking"):
         return cevap
 
     except Exception as gemini_err:
-        # ASIL HATAYI TERMİNALE YAZDIRIYORUZ Kİ SORUNU GÖREBİLESİN
         print(f"🚨 Kök Neden (Gemini API Çöktü): {gemini_err}", flush=True)
         print(f"🔄 Yedeğe (Ollama/Ngrok) geçiliyor...", flush=True)
         
@@ -113,8 +112,8 @@ def ask_ai(mesaj, user_id="default_user", image_path=None, mode="thinking"):
                 hafizaya_ekle(cevap, kaynak_adi=user_id)
                 return cevap
             else:
-                return f"⚠️ Yedek motor sunucu hatası verdi. (HTTP Kod: {res.status_code}). Ngrok tünelinizin güncel adresini ve Ollama'nın çalıştığını kontrol edin. Ana hata şuydu: {gemini_err}"
+                return f"⚠️ Yedek motor sunucu hatası verdi. (HTTP Kod: {res.status_code}). Ngrok tünelinizin güncel adresini kontrol edin.\nAna Beyin Hatası: {gemini_err}"
         except requests.exceptions.ConnectionError:
-            return f"⚠️ Yedek motora ulaşılamıyor (Bağlantı reddedildi). Ngrok URL'sini kontrol edin.\nAna Beyin (Gemini) hatası: {gemini_err}"
+            return f"⚠️ Yedek motora ulaşılamıyor (Bağlantı reddedildi). Ngrok URL'sini güncelleyin.\nAna Beyin (Gemini) hatası: {gemini_err}"
         except Exception as ollama_err:
             return f"⚠️ Hem ana beyin hem de yedek motor tamamen çöktü.\nGemini Hatası: {gemini_err}\nOllama Hatası: {ollama_err}"
