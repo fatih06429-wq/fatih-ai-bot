@@ -7,7 +7,10 @@ import datetime
 from google import genai
 from google.genai import types
 from duckduckgo_search import DDGS
-from hafiza import hafizaya_ekle, hafizadan_getir
+
+# İŞTE EKSİK OLAN SATIR: hafizayi_temizle eklendi
+from hafiza import hafizaya_ekle, hafizadan_getir, hafizayi_temizle 
+
 import firebase_admin
 from firebase_admin import credentials, firestore
 from scrapers import aof_duyurulari_cek
@@ -23,11 +26,12 @@ try:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
         db = firestore.client()
-        print("✅ Firebase Bağlantısı Başarılı!")
+        # flush=True eklendi ki loglar anında terminale düşsün
+        print("✅ Firebase Bağlantısı Başarılı!", flush=True) 
     else:
         db = None
 except Exception as e:
-    print(f"❌ Firebase başlatılamadı: {e}")
+    print(f"❌ Firebase başlatılamadı: {e}", flush=True)
     db = None
 
 # --- CLAUDE CODE SEVİYESİNDE SİSTEM İSTEMİ (SYSTEM PROMPT) ---
@@ -96,7 +100,7 @@ def ask_ai(mesaj, user_id="default_user", image_path=None):
 
     # 4. YEDEK MOTOR (Ollama - Ngrok)
     except Exception as gemini_err:
-        print(f"Gemini API Hatası, yedeğe geçiliyor: {gemini_err}")
+        print(f"Gemini API Hatası, yedeğe geçiliyor: {gemini_err}", flush=True)
         try:
             # Ngrok üzerinden Ollama'ya istek at
             payload = {
