@@ -12,7 +12,6 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # --- AYARLAR ---
-# DİKKAT: Ngrok'u her açtığında buradaki linki yenilemen gerekir!
 NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate"
 
 try:
@@ -43,18 +42,16 @@ def internette_ara(sorgu):
 
 def fallback_ollama(mesaj):
     try:
-        sistem_talimati = """Sen Kerem AI'sın. Çok dilli (multilingual), profesyonel bir asistansın."""
+        # Gelişmiş Edebi Prompt Kontrolü: Modelin uydurmasını ve polisiye türü sanmasını engeller
+        sistem_talimati = """Sen Kerem AI'sın. Çok dilli, dünya klasikleri literatürüne ve edebi analizlere son derece hakim uzman bir asistansın.
+        DİKKAT: Eğer kullanıcı sana 'Suç ve Ceza', 'Satranç', 'Kürk Mantolu Madonna', 'Martin Eden' gibi dünyaca ünlü kitaplardan bahsediyorsa, bunu sakın genel bir polisiye veya dedektiflik türü olarak algılama! Doğrudan o kitabın orijinal yazarına (Dostoyevski, Stefan Zweig, Sabahattin Ali vb.) ve o eserin gerçek karakterleri ile psikolojik tahlillerine odaklanarak doğru edebi bilgi ver. Bilmediğin veya emin olmadığın tarihi/edebi detaylar olursa uydurma, dürüstçe belirt."""
+        
         payload = {"model": "qwen2.5:7b", "prompt": f"{sistem_talimati}\n\nSoru: {mesaj}", "stream": False}
         headers = {"ngrok-skip-browser-warning": "true", "Content-Type": "application/json"}
         
         response = requests.post(NGROK_LINK, json=payload, headers=headers, timeout=120)
         if response.status_code == 200:
-            return f"*(Yerel Sistem)*\n{response.json().get('response', '')}"
-        
-        # 404 veya 502 hatalarında kullanıcıyı bilgilendir
-        if response.status_code == 404 or response.status_code == 502:
-             return "Yedek motor bağlantısı koptu. Lütfen sistem yöneticisinden Ngrok linkini güncellemesini isteyin."
-             
+            return f"*(Yerel Sistem Devrede)*\n\n{response.json().get('response', '')}"
         return f"Yedek motor meşgul. (Hata: {response.status_code})"
     except Exception as e:
         return f"Bağlantı hatası: {e}"
@@ -83,13 +80,11 @@ def ask_ai(text, user_id, image_path=None):
                 pdf_text = "\n".join([page.get_text() for page in doc])
                 hafizaya_ekle(pdf_text, kaynak_adi=os.path.basename(image_path))
                 
-                # ÇÖZÜM: PDF içeriğini sadece okuma, sohbet geçmişine (kısa hafızaya) de kaydet!
                 pdf_baglami = f"Kullanıcı bir belge yükledi. Belge İçeriği Özeti:\n{pdf_text[:10000]}\n\nKullanıcının Notu: {full_text}"
                 sohbet_gecmisi[user_id].append({"role": "user", "parts": [{"text": pdf_baglami}]})
                 model_contents = sohbet_gecmisi[user_id]
             else:
                 img = PIL.Image.open(image_path)
-                # Görseli de sohbet geçmişine "görsel yüklendi" notuyla ekle
                 sohbet_gecmisi[user_id].append({"role": "user", "parts": [{"text": f"[Kullanıcı bir görsel yükledi] {full_text}"}]})
                 model_contents = [img, full_text]
         else:
@@ -104,14 +99,14 @@ def ask_ai(text, user_id, image_path=None):
         
         cevap = response.text
         if not image_path or image_path.lower().endswith('.pdf'):
-            # Modeli cevabını da kısa süreli hafızaya mutlaka yaz
             sohbet_gecmisi[user_id].append({"role": "model", "parts": [{"text": cevap}]})
         
         if db: db.collection("sohbetler").document(str(user_id)).set({"gecmis": sohbet_gecmisi[user_id][-20:]})
         return cevap
         
     except Exception as e:
-        print(f"Hata oluştu, yedek sisteme geçiliyor: {e}")
+        # RENDER LOGLARINDA HATAYI GÖREBİLMEMİZ İÇİN BURAYI GÜÇLENDİRDİK
+        print(f"🔴 ANA MOTOR HATASI (YEDEĞE GEÇİLİYOR): {e}")
         if not image_path and sohbet_gecmisi.get(user_id) and sohbet_gecmisi[user_id][-1]["role"] == "user":
             sohbet_gecmisi[user_id].pop()
         return fallback_ollama(text)
