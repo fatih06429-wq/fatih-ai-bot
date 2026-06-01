@@ -13,7 +13,7 @@ from firebase_admin import credentials, firestore
 from scrapers import aof_duyurulari_cek
 
 # --- AYARLAR ---
-NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev"
+NGROK_LINK = "https://couch-customary-affair.ngrok-free.dev/api/generate"
 
 try:
     firebase_json = os.environ.get("FIREBASE_JSON")
