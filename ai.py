@@ -8,7 +8,6 @@ from google import genai
 from google.genai import types
 from duckduckgo_search import DDGS
 
-# İŞTE EKSİK OLAN SATIR: hafizayi_temizle eklendi
 from hafiza import hafizaya_ekle, hafizadan_getir, hafizayi_temizle 
 
 import firebase_admin
@@ -26,7 +25,6 @@ try:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
         db = firestore.client()
-        # flush=True eklendi ki loglar anında terminale düşsün
         print("✅ Firebase Bağlantısı Başarılı!", flush=True) 
     else:
         db = None
@@ -45,17 +43,13 @@ Kesinlikle Uyman Gereken Kodlama Kuralları:
 4. ÇÖZÜM ODAKLILIK: Bir hata logu veya bug iletildiğinde, önce sorunun kaynağını algoritmik olarak düşün, sonra doğrudan çözüme odaklan.
 """
 
-def ask_ai(mesaj, user_id="default_user", image_path=None):
-    # 1. Geçmiş hafızayı getir (Mevcut mesaj ile anlamsal/vektörel arama yapılıyor)
+# PARAMETRE GÜNCELLEMESİ: mode eklendi
+def ask_ai(mesaj, user_id="default_user", image_path=None, mode="thinking"):
     gecmis = hafizadan_getir(mesaj)
-    
-    # 2. Yeni mesajı hafızaya ekle (kaynak_adi parametresine user_id atanıyor)
     hafizaya_ekle(mesaj, kaynak_adi=user_id)
     
-    # Tüm içeriği topla
     contents = []
     
-    # Görsel veya PDF varsa ekle
     if image_path and os.path.exists(image_path):
         if image_path.lower().endswith(".pdf"):
             pdf_metin = ""
@@ -73,38 +67,43 @@ def ask_ai(mesaj, user_id="default_user", image_path=None):
                 contents.append(img)
             except: pass
 
-    # Geçmiş bağlamı ve mevcut mesajı ekle
     tam_metin = f"Önceki Bağlam:\n{gecmis}\n\nKullanıcının Yeni Mesajı: {mesaj}"
     contents.append(tam_metin)
 
-    # 3. Gemini API ile bağlan (Kodlama için gemini-1.5-pro tavsiye edilir)
+    # MOD SEÇİMİNE GÖRE MOTOR VE SICAKLIK AYARI
+    if mode == "fast":
+        secilen_model = 'gemini-1.5-flash'
+        sicaklik = 0.5 # Hızlı modda standart esneklik
+    else:
+        secilen_model = 'gemini-1.5-pro'
+        sicaklik = 0.2 # Kodlama ve derin analiz için halüsinasyonu engelleyen düşük sıcaklık
+
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
         
-        # Sistem kimliğini yapılandırma olarak ekliyoruz
         config = types.GenerateContentConfig(
             system_instruction=SISTEM_KIMLIGI,
-            temperature=0.3 # Kodlamada halüsinasyonu önlemek için düşük sıcaklık
+            temperature=sicaklik 
         )
         
         response = client.models.generate_content(
-            model='gemini-1.5-pro',
+            model=secilen_model,
             contents=contents,
             config=config
         )
         cevap = response.text
         
-        # Cevabı hafızaya al ve döndür
         hafizaya_ekle(cevap, kaynak_adi=user_id)
         return cevap
 
-    # 4. YEDEK MOTOR (Ollama - Ngrok)
     except Exception as gemini_err:
-        print(f"Gemini API Hatası, yedeğe geçiliyor: {gemini_err}", flush=True)
+        # ASIL HATAYI TERMİNALE YAZDIRIYORUZ Kİ SORUNU GÖREBİLESİN
+        print(f"🚨 Kök Neden (Gemini API Çöktü): {gemini_err}", flush=True)
+        print(f"🔄 Yedeğe (Ollama/Ngrok) geçiliyor...", flush=True)
+        
         try:
-            # Ngrok üzerinden Ollama'ya istek at
             payload = {
-                "model": "qwen2.5-coder:7b", # Veya kullandığın yerel modelin adı
+                "model": "qwen2.5-coder:7b",
                 "prompt": f"{SISTEM_KIMLIGI}\n\n{tam_metin}",
                 "stream": False
             }
@@ -114,6 +113,8 @@ def ask_ai(mesaj, user_id="default_user", image_path=None):
                 hafizaya_ekle(cevap, kaynak_adi=user_id)
                 return cevap
             else:
-                return f"Yedek motor hata verdi. (Kod: {res.status_code})"
+                return f"⚠️ Yedek motor sunucu hatası verdi. (HTTP Kod: {res.status_code}). Ngrok tünelinizin güncel adresini ve Ollama'nın çalıştığını kontrol edin. Ana hata şuydu: {gemini_err}"
+        except requests.exceptions.ConnectionError:
+            return f"⚠️ Yedek motora ulaşılamıyor (Bağlantı reddedildi). Ngrok URL'sini kontrol edin.\nAna Beyin (Gemini) hatası: {gemini_err}"
         except Exception as ollama_err:
-            return f"Hem ana beyin hem de yedek motor meşgul. Lütfen daha sonra tekrar deneyin."
+            return f"⚠️ Hem ana beyin hem de yedek motor tamamen çöktü.\nGemini Hatası: {gemini_err}\nOllama Hatası: {ollama_err}"

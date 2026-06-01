@@ -7,7 +7,6 @@ from werkzeug.utils import secure_filename
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 
-# DEĞİŞİKLİK BURADA: hafizayi_temizle doğrudan hafiza.py'den çekiliyor.
 from ai import ask_ai
 from hafiza import hafizayi_temizle
 from firebase_admin import firestore
@@ -16,7 +15,6 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# TAM TASARIMLI ARAYÜZ (Dosya yükleme uyarıları ve Gönder Butonu eklendi)
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -209,7 +207,6 @@ HTML_SAYFASI = """
             document.getElementById("theme-btn").innerHTML = '🌙';
         }
 
-        // YENİ: Dosya seçildiğinde kullanıcıyı bilgilendir
         fileInput.addEventListener('change', function(e) {
             const fileName = e.target.files[0]?.name;
             if (fileName) {
@@ -384,14 +381,12 @@ HTML_SAYFASI = """
             const currentMsg = userInput.value;
             const fileInput = document.getElementById("file-input");
             
-            // Eğer hem mesaj boşsa hem dosya yoksa işlem yapma
             if (!currentMsg.trim() && fileInput.files.length === 0) return;
             
             if (isFirstMessage) { document.getElementById("welcome-screen").style.display = "none"; }
             
             const chat = document.getElementById("chat-container");
             
-            // YENİ: Ekrana yazdırılacak metni hazırla (Dosya varsa göster)
             let displayMsg = currentMsg;
             if (fileInput.files.length > 0) {
                 displayMsg = "📎 <b>" + fileInput.files[0].name + "</b>" + (currentMsg ? "<br>" + currentMsg : "");
@@ -403,10 +398,14 @@ HTML_SAYFASI = """
             formData.append("mesaj", currentMsg);
             formData.append("session_id", currentSessionId); 
             formData.append("user_id", deviceId);
+            
+            # YENİ EKLENEN SATIR: Kullanıcının seçtiği modu backend'e gönderiyoruz
+            formData.append("mode", document.getElementById("ai-mode").value);
+            
             if (fileInput.files.length > 0) formData.append("dosya", fileInput.files[0]);
             
             userInput.value = ""; fileInput.value = "";
-            userInput.placeholder = "Kerem'e bir şey sor..."; // Placeholder'ı sıfırla
+            userInput.placeholder = "Kerem'e bir şey sor...";
             userInput.disabled = true; 
             
             const typingId = "type-" + Date.now();
@@ -482,16 +481,21 @@ def soru_cevapla():
     mesaj = request.form.get("mesaj", "")
     session_id = request.form.get("session_id", "")
     user_id = request.form.get("user_id", "")
+    
+    # YENİ EKLENEN SATIR: JS'den gelen modu okuyoruz (Varsayılan olarak thinking)
+    secilen_mod = request.form.get("mode", "thinking")
+    
     dosya_yolu = None
     if 'dosya' in request.files and request.files['dosya'].filename:
         dosya_yolu = os.path.join(UPLOAD_FOLDER, secure_filename(request.files['dosya'].filename))
         request.files['dosya'].save(dosya_yolu)
     
-    # YENİ: Sadece dosya gönderilip metin yazılmamışsa, yapay zekanın çökmemesi için default metin ekle.
     if dosya_yolu and not mesaj.strip():
         mesaj = "Lütfen gönderdiğim bu dosyayı/görseli incele ve detaylıca açıkla."
 
-    cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu)
+    # YENİ EKLENEN SATIR: Mod parametresi ask_ai fonksiyonuna iletiliyor
+    cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu, mode=secilen_mod)
+    
     if dosya_yolu and os.path.exists(dosya_yolu): os.remove(dosya_yolu)
     
     try:
@@ -511,7 +515,7 @@ async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file = await context.bot.get_file(update.message.voice.file_id)
         await file.download_to_drive(dosya_adi)
         
-        reply = ask_ai("Bu sesli mesaja yanıt ver.", user_id, image_path=dosya_adi)
+        reply = ask_ai("Bu sesli mesaja yanıt ver.", user_id, image_path=dosya_adi, mode="fast")
         await bekleme.edit_text(reply)
     except Exception as e: 
         await bekleme.edit_text(f"Ses işleme hatası: {e}")
@@ -525,14 +529,14 @@ async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         file = await context.bot.get_file(update.message.document.file_id)
         await file.download_to_drive(dosya_adi)
-        reply = ask_ai(update.message.caption or "Analiz et", user_id, image_path=dosya_adi)
+        reply = ask_ai(update.message.caption or "Analiz et", user_id, image_path=dosya_adi, mode="thinking")
         await bekleme.edit_text(reply)
     except Exception as e: await bekleme.edit_text(f"Hata: {e}")
     finally:
         if os.path.exists(dosya_adi): os.remove(dosya_adi)
 
 async def chat(update, context): 
-    reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
+    reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}", mode="thinking")
     await update.message.reply_text(reply)
 
 async def temizle_command(update, context):
