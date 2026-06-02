@@ -17,7 +17,7 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# 1. FIREBASE BAŞLATMA (Hata Giderildi)
+# 1. FIREBASE BASLATMA
 try:
     firebase_json_str = os.environ.get("FIREBASE_JSON")
     if firebase_json_str:
@@ -30,14 +30,14 @@ except Exception as e:
     print(f"❌ Firebase baslatma hatasi: {e}", flush=True)
 
 
-# 2. TAM TASARIMLI ARAYÜZ (Geri Getirildi)
+# 2. TAM TASARIMLI ARAYUZ
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kerem AI - Yapay Zeka Asistanı</title>
+    <title>Kerem AI - Yapay Zeka Asistani</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root {
@@ -149,8 +149,8 @@ HTML_SAYFASI = """
             Yeni Sohbet
         </button>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 0 5px;">
-            <div style="font-size:12px; color:#888; font-weight:bold;">GEÇMİŞ SOHBETLER</div>
-            <button onclick="tumSohbetleriSil()" style="background:transparent; border:none; color:#ff5252; cursor:pointer; font-size:12px; opacity:0.8; font-weight:bold;" title="Tüm Sohbetleri Sil">🗑️ Tümünü Sil</button>
+            <div style="font-size:12px; color:#888; font-weight:bold;">GECMIS SOHBETLER</div>
+            <button onclick="tumSohbetleriSil()" style="background:transparent; border:none; color:#ff5252; cursor:pointer; font-size:12px; opacity:0.8; font-weight:bold;" title="Tum Sohbetleri Sil">🗑️ Tumunu Sil</button>
         </div>
         <div class="history-list" id="sidebar-list"></div>
     </div>
@@ -165,12 +165,12 @@ HTML_SAYFASI = """
         
         <div id="chat-container">
             <div id="welcome-screen" style="text-align:center; padding-top:50px;">
-                <h1 style="font-size:38px; margin-bottom:10px; font-weight:600; background: linear-gradient(45deg, #a8c7fa, #ffb6c1); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Merhaba, bugün ne keşfedelim?</h1>
+                <h1 style="font-size:38px; margin-bottom:10px; font-weight:600; background: linear-gradient(45deg, #a8c7fa, #ffb6c1); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Merhaba, bugun ne kesfedelim?</h1>
                 <div class="chips-container">
-                    <div class="chip" onclick="hizliSor('AÖF ders notlarımı inceleyip benim için özet çıkarır mısın?')">📚 AÖF Ders Özeti Çıkar</div>
-                    <div class="chip" onclick="hizliSor('Python kodumda hata alıyorum, mantık hatalarını nasıl ayıklayabilirim?')">💻 Python Hata Ayıklama</div>
-                    <div class="chip" onclick="hizliSor('Bana Ammice Arapça (Suudi Arabistan) günlük diyalog kalıplarıyla pratik yaptır.')">🇸🇦 Ammice Arapça Pratik</div>
-                    <div class="chip" onclick="hizliSor('Tell me a short story in English to improve my vocabulary.')">🇬🇧 İngilizce Pratik Yap</div>
+                    <div class="chip" onclick="hizliSor('AÖF ders notlarımı inceleyip benim için özet çıkarır mısın?')">📚 AOF Ders Ozeti Cikar</div>
+                    <div class="chip" onclick="hizliSor('Python kodumda hata alıyorum, mantık hatalarını nasıl ayıklayabilirim?')">💻 Python Hata Ayiklama</div>
+                    <div class="chip" onclick="hizliSor('Bana Ammice Arapça (Suudi Arabistan) günlük diyalog kalıplarıyla pratik yaptır.')">🇸🇦 Ammice Arapca Pratik</div>
+                    <div class="chip" onclick="hizliSor('Tell me a short story in English to improve my vocabulary.')">🇬🇧 Ingilizce Pratik Yap</div>
                 </div>
             </div>
         </div>
@@ -178,26 +178,26 @@ HTML_SAYFASI = """
         <div id="input-container">
             <input type="file" id="file-input" style="display:none" accept="image/*, .pdf">
             <div class="input-capsule">
-                <button class="capsule-btn" onclick="document.getElementById('file-input').click()" title="Dosya veya Görsel Ekle">
+                <button class="capsule-btn" onclick="document.getElementById('file-input').click()" title="Dosya veya Gorsel Ekle">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
                 
-                <input type="text" id="user-input" placeholder="Kerem'e bir şey sor..." autocomplete="off" onkeypress="if(event.key === 'Enter') mesajGonder()">
+                <input type="text" id="user-input" placeholder="Kerem'e bir sey sor..." autocomplete="off" onkeypress="if(event.key === 'Enter') mesajGonder()">
                 
-                <select id="ai-mode" class="capsule-select" title="Yanıt Hızını Seç">
-                    <option value="thinking">🧠 Düşünen Mod</option>
-                    <option value="fast">⚡ Hızlı Mod</option>
+                <select id="ai-mode" class="capsule-select" title="Yanit Hizini Sec">
+                    <option value="thinking">🧠 Dusunen Mod</option>
+                    <option value="fast">⚡ Hizli Mod</option>
                 </select>
                 
-                <button class="capsule-btn" id="mic-btn" title="Basılı Tutarak Konuş">
+                <button class="capsule-btn" id="mic-btn" title="Basili Tutarak Konus">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
                 </button>
                 
-                <button class="capsule-btn" onclick="mesajGonder()" title="Mesajı Gönder">
+                <button class="capsule-btn" onclick="mesajGonder()" title="Mesaji Gonder">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                 </button>
             </div>
-            <div class="disclaimer-text">Kerem AI bir yapay zeka modeli olduğu için hata yapabilir.</div>
+            <div class="disclaimer-text">Kerem AI bir yapay zeka modeli oldugu icin hata yapabilir.</div>
         </div>
     </div>
 
@@ -226,7 +226,7 @@ HTML_SAYFASI = """
         fileInput.addEventListener('change', function(e) {
             const fileName = e.target.files[0]?.name;
             if (fileName) {
-                userInput.placeholder = "📎 " + fileName + " seçildi (Gönder'e bas)...";
+                userInput.placeholder = "📎 " + fileName + " secildi (Gonder'e bas)...";
                 userInput.focus();
             }
         });
@@ -284,7 +284,7 @@ HTML_SAYFASI = """
             recognition.onstart = () => { 
                 isListening = true; 
                 micBtn.classList.add("listening"); 
-                userInput.placeholder = "Dinliyorum, konuşun ve bırakın..."; 
+                userInput.placeholder = "Dinliyorum, konusun ve birakin..."; 
             };
             
             recognition.onresult = (e) => { 
@@ -301,7 +301,7 @@ HTML_SAYFASI = """
             recognition.onend = () => { 
                 isListening = false; 
                 micBtn.classList.remove("listening"); 
-                userInput.placeholder = "Kerem'e bir şey sor..."; 
+                userInput.placeholder = "Kerem'e bir sey sor..."; 
                 if (userInput.value.trim() !== "") mesajGonder(); 
             };
             
@@ -322,7 +322,7 @@ HTML_SAYFASI = """
                 const data = await res.json();
                 const list = document.getElementById('sidebar-list');
                 list.innerHTML = '';
-                if(data.sohbetler.length===0) return list.innerHTML = '<div style="color:#888; font-size:13px; text-align:center; margin-top:20px;">Henüz sohbet yok.</div>';
+                if(data.sohbetler.length===0) return list.innerHTML = '<div style="color:#888; font-size:13px; text-align:center; margin-top:20px;">Henuz sohbet yok.</div>';
                 
                 data.sohbetler.forEach(s => {
                     const row = document.createElement('div');
@@ -339,7 +339,7 @@ HTML_SAYFASI = """
 
         async function sohbetSil(sessionId, event) {
             event.stopPropagation();
-            if(!confirm("Bu sohbet geçmişini silmek istiyor musunuz?")) return;
+            if(!confirm("Bu sohbet gecmisini silmek istiyor musunuz?")) return;
             try {
                 const res = await fetch('/api/sohbet/sil?session_id=' + sessionId, { method: 'DELETE' });
                 const data = await res.json();
@@ -347,16 +347,16 @@ HTML_SAYFASI = """
                     if(currentSessionId === sessionId) yeniSohbet();
                     else sohbetleriYukle();
                 }
-            } catch(e) { alert("Hata oluştu."); }
+            } catch(e) { alert("Hata olustu."); }
         }
 
         async function tumSohbetleriSil() {
-            if(!confirm("Tüm sohbet geçmişini kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) return;
+            if(!confirm("Tum sohbet gecmisini kalici olarak silmek istediginize emin misiniz? Bu islem geri alinamaz!")) return;
             try {
                 const res = await fetch('/api/sohbet/sil-tum?user_id=' + deviceId, { method: 'DELETE' });
                 const data = await res.json();
                 if(data.status === "success") { yeniSohbet(); }
-            } catch(e) { alert("Silme işlemi sırasında hata oluştu."); }
+            } catch(e) { alert("Silme islemi sirasinda hata olustu."); }
         }
 
         async function sohbetAc(id, rowElement) {
@@ -364,7 +364,7 @@ HTML_SAYFASI = """
             document.querySelectorAll('.history-row').forEach(r => r.classList.remove('active'));
             if(rowElement) rowElement.classList.add('active');
             const container = document.getElementById("chat-container");
-            container.innerHTML = '<div style="text-align:center; padding: 20px;"><div class="spinner"></div> Yükleniyor...</div>';
+            container.innerHTML = '<div style="text-align:center; padding: 20px;"><div class="spinner"></div> Yukleniyor...</div>';
             try {
                 const res = await fetch('/api/sohbet/' + id); const data = await res.json();
                 container.innerHTML = '';
@@ -374,7 +374,7 @@ HTML_SAYFASI = """
                     container.innerHTML += '<div class="message-wrapper"><div class="message ' + msgClass + '">' + msgContent + '</div></div>';
                 });
                 container.scrollTop = container.scrollHeight;
-            } catch(e) { container.innerHTML = '<div style="color:#ff5252;">Hata oluştu.</div>'; }
+            } catch(e) { container.innerHTML = '<div style="color:#ff5252;">Hata olustu.</div>'; }
         }
 
         function yeniSohbet() { location.reload(); }
@@ -417,11 +417,11 @@ HTML_SAYFASI = """
             if (fileInput.files.length > 0) formData.append("dosya", fileInput.files[0]);
             
             userInput.value = ""; fileInput.value = "";
-            userInput.placeholder = "Kerem'e bir şey sor...";
+            userInput.placeholder = "Kerem'e bir sey sor...";
             userInput.disabled = true; 
             
             const typingId = "type-" + Date.now();
-            chat.innerHTML += '<div class="message-wrapper"><div id="' + typingId + '" class="message bot-msg"><div class="spinner"></div> Kerem düşünüyor...</div></div>';
+            chat.innerHTML += '<div class="message-wrapper"><div id="' + typingId + '" class="message bot-msg"><div class="spinner"></div> Kerem dusunuyor...</div></div>';
             chat.scrollTop = chat.scrollHeight;
             
             try {
@@ -433,7 +433,7 @@ HTML_SAYFASI = """
                 await daktiloEfekti(botBox, data.cevap);
                 botBox.innerHTML += '<div class="msg-actions"><button class="action-icon btn-dinle" onclick="sesliOkuElement(this)">🔊 Dinle</button></div>';
                 if(isFirstMessage) { sohbetleriYukle(); isFirstMessage = false; }
-            } catch (error) { document.getElementById(typingId).innerHTML = "Bağlantı hatası."; }
+            } catch (error) { document.getElementById(typingId).innerHTML = "Baglanti hatasi."; }
             
             userInput.disabled = false;
             userInput.focus();
@@ -502,7 +502,7 @@ def soru_cevapla():
         request.files['dosya'].save(dosya_yolu)
     
     if dosya_yolu and not mesaj.strip():
-        mesaj = "Lütfen gönderdiğim bu dosyayı/görseli incele ve detaylıca açıkla."
+        mesaj = "Lutfen gonderdigim bu dosyayi/gorseli incele ve detaylica acikla."
 
     cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu, mode=secilen_mod)
     
@@ -515,24 +515,24 @@ def soru_cevapla():
     except: pass
     return jsonify({"cevap": cevap})
 
-# 4. TELEGRAM BOT FONKSİYONLARI
+# 4. TELEGRAM BOT FONKSIYONLARI
 async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = f"tg_{update.message.from_user.id}"
-    bekleme = await update.message.reply_text("🎧 Sesli mesajın dinleniyor...")
+    bekleme = await update.message.reply_text("🎧 Sesli mesajin dinleniyor...")
     dosya_adi = f"tg_ses_{user_id}_{int(time.time())}.ogg"
     try:
         file = await context.bot.get_file(update.message.voice.file_id)
         await file.download_to_drive(dosya_adi)
-        reply = ask_ai("Bu sesli mesaja yanıt ver.", user_id, image_path=dosya_adi, mode="fast")
+        reply = ask_ai("Bu sesli mesaja yanit ver.", user_id, image_path=dosya_adi, mode="fast")
         await bekleme.edit_text(reply)
     except Exception as e: 
-        await bekleme.edit_text(f"Ses işleme hatası: {e}")
+        await bekleme.edit_text(f"Ses isleme hatasi: {e}")
     finally:
         if os.path.exists(dosya_adi): os.remove(dosya_adi)
 
 async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = f"tg_{update.message.from_user.id}"
-    bekleme = await update.message.reply_text("📥 İşleniyor...")
+    bekleme = await update.message.reply_text("📥 Isleniyor...")
     dosya_adi = f"tg_doc_{user_id}_{int(time.time())}.pdf"
     try:
         file = await context.bot.get_file(update.message.document.file_id)
@@ -556,22 +556,22 @@ async def temizle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for doc in docs:
             doc.reference.delete()
     except: pass
-    await update.message.reply_text("🧹 Telegram sohbet geçmişin ve hafızam tamamen sıfırlandı!")
+    await update.message.reply_text("🧹 Telegram sohbet gecmisin ve hafizam tamamen sifirlandi!")
 
 def run_telegram_bot():
-    # Yeni event loop oluşturup set et (Asenkron hataları önler)
+    # Yeni event loop olusturup set et (Asenkron hatalari onler)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     app_bot = Application.builder().token("8864490425:AAH8Xm4buW-DfeUgTkMYTKdPJ8mQNLx59q0").build()
-    app_bot.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Kerem AI Hazır.")))
+    app_bot.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Kerem AI Hazir.")))
     app_bot.add_handler(CommandHandler("temizle", temizle_command)) 
     app_bot.add_handler(MessageHandler(filters.Document.PDF, dosya_al))
     app_bot.add_handler(MessageHandler(filters.VOICE, ses_al))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
     app_bot.run_polling()
 
-# 5. UYGULAMAYI BAŞLATMA
+# 5. UYGULAMAYI BASLATMA
 if __name__ == '__main__':
     def run_flask():
         port = int(os.environ.get("PORT", 10000))
@@ -579,6 +579,6 @@ if __name__ == '__main__':
     
     threading.Thread(target=run_flask, daemon=True).start()
     
-    # TELEGRAM ÇAKIŞMASINI ÖNLEMEK İÇİN: 
-    # VS Code veya CMD üzerinde bu kod çalışıyorsa durdur. Sadece sunucuda çalışsın.
+    # TELEGRAM CAKISMASINI ONLEMEK ICIN: 
+    # VS Code veya CMD uzerinde bu kod calisiyorsa durdur. Sadece sunucuda calissin.
     run_telegram_bot()
