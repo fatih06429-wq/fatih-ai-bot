@@ -502,7 +502,7 @@ def soru_cevapla():
         request.files['dosya'].save(dosya_yolu)
     
     if dosya_yolu and not mesaj.strip():
-        mesaj = "Lutfen gonderdigim bu dosyayi/gorseli incele ve detaylica acikla."
+        mesaj = "Lütfen içeriğini metin olarak sana sunduğum bu dokümanı analiz et ve detaylı bir özetini çıkar."
 
     cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu, mode=secilen_mod)
     
