@@ -561,23 +561,26 @@ def run_telegram_bot():
 
 # 5. UYGULAMAYI BAŞLATMA
 if __name__ == '__main__':
-    # 1. Telegram botunu arka planda başlat (Flask'ı engellemesin diye daemon yapıyoruz)
-    def start_bot_background():
+    # 1. Flask Web Sunucusunu Arka Planda Başlat (Thread ile)
+    # Werkzeug sunucusunun ana thread'i işgal etmesini engelliyoruz
+    def start_flask():
         try:
-            # Event loop oluşturuyoruz çünkü Telegram async çalışıyor
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            run_telegram_bot()
+            port = int(os.environ.get("PORT", 10000))
+            print(f"🌐 Web sunucusu {port} portunda başlatılıyor...", flush=True)
+            # use_reloader=False ve threaded=True ÇOK ÖNEMLİ
+            app.run(host="0.0.0.0", port=port, use_reloader=False, threaded=True)
         except Exception as e:
-            print(f"❌ BOT CRITICAL ERROR: {e}", flush=True)
+            print(f"❌ Web sunucusu hatası: {e}", flush=True)
 
-    bot_thread = threading.Thread(target=start_bot_background, daemon=True)
-    bot_thread.start()
+    web_thread = threading.Thread(target=start_flask, daemon=True)
+    web_thread.start()
+    
+    # Render'ın portu algılaması için küçük bir bekleme süresi
+    time.sleep(2)
 
-    # 2. Flask sunucusunu ANA iş parçacığında başlat (Render portu görebilsin diye)
+    # 2. Telegram Botunu ANA İş Parçacığında (Main Thread) Başlat
+    # Hatanın çözümü budur: Telegram main thread'de olmak zorundadır.
     try:
-        port = int(os.environ.get("PORT", 10000))
-        print(f"🌐 Web sunucusu {port} portunda başlatılıyor...", flush=True)
-        app.run(host="0.0.0.0", port=port, use_reloader=False)
+        run_telegram_bot()
     except Exception as e:
-        print(f"❌ Web sunucusu hatası: {e}", flush=True)
+        print(f"❌ BOT CRITICAL ERROR: {e}", flush=True)
