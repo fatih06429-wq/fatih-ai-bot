@@ -33,8 +33,8 @@ Görevin, sana verilen kod taslağını şu kriterlere göre incelemektir:
 class UltraReasoningAgent:
     def __init__(self, api_key):
         self.client = genai.Client(api_key=api_key)
-        # Kotalara takılmamak ve hızlı ajan döngüsü için 1.5-flash kullanıyoruz
-        self.model_name = 'gemini-1.5-flash' 
+        # Kesin çalışan modele geri dönüyoruz. Kota çakışması Telegram kapatılarak çözüldü.
+        self.model_name = 'gemini-2.0-flash' 
 
     def _execute_call(self, system_instruction, prompt, contents, temperature):
         """Gemini API katmanına güvenli ve izole çağrı yapar."""
@@ -129,7 +129,7 @@ def ask_ai(mesaj, user_id="default_user", image_path=None, mode="thinking"):
                 "prompt": f"{SISTEM_KIMLIGI_YAZICI}\n\nBağlam:\n{gecmis}\n\nMesaj: {mesaj}",
                 "stream": False
             }
-            # NGROK 404/403 HATASINI ENGELLEYEN HEADER EKLENDİ
+            # NGROK 404/403 HATASINI ENGELLEYEN HEADER
             headers = {
                 "ngrok-skip-browser-warning": "true",
                 "Content-Type": "application/json"

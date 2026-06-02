@@ -563,7 +563,7 @@ def run_telegram_bot():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    app_bot = Application.builder().token("8864490425:AAH8Xm4buW-DfeUgTkMYTKdPJ8mQNLx59q0").build()
+    app_bot = Application.builder().token("8864490425:AAF-TtQoqlPLBRKtJ4-FMxCohMU6gAvx-Ek").build()
     app_bot.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Kerem AI Hazir.")))
     app_bot.add_handler(CommandHandler("temizle", temizle_command)) 
     app_bot.add_handler(MessageHandler(filters.Document.PDF, dosya_al))
