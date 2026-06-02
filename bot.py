@@ -1,4 +1,5 @@
 import os
+import json
 import threading
 import asyncio
 import time
@@ -6,6 +7,7 @@ from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
+from telegram_app import run_telegram_bot
 
 # Modülleri temiz bir şekilde import ediyoruz
 from ai import ask_ai
