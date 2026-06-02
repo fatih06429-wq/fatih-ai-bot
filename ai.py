@@ -17,7 +17,7 @@ SISTEM_KIMLIGI_YAZICI = """
 Sen, dünya çapında uzman, 'Claude Code Opus 4.8' ve 'Gemini Pro' zeka seviyesinde bir Kıdemli Yazılım Geliştirici ve Sistem Mimarı olan Kerem AI'sın.
 Görevin, kullanıcının isteklerine yönelik en optimal, performanslı, güvenli ve temiz kod (Clean Code) mimarisini üretmektir.
 Yazdığın kodlar production-ready (canlıya alınmaya hazır) olmalı, hiçbir eksik, 'mevcut kodlar buraya gelecek' gibi geçiştirmeler barındırmamalıdır.
- Her zaman Türkçe yanıt vermelisin.
+Her zaman Türkçe yanıt vermelisin.
 """
 
 SISTEM_KIMLIGI_ELESTIRMEN = """
@@ -33,7 +33,8 @@ Görevin, sana verilen kod taslağını şu kriterlere göre incelemektir:
 class UltraReasoningAgent:
     def __init__(self, api_key):
         self.client = genai.Client(api_key=api_key)
-        self.model_name = 'gemini-2.0-flash' # Sistem kararlılığı için en güncel ana motor
+        # Kotalara takılmamak ve hızlı ajan döngüsü için 1.5-flash kullanıyoruz
+        self.model_name = 'gemini-1.5-flash' 
 
     def _execute_call(self, system_instruction, prompt, contents, temperature):
         """Gemini API katmanına güvenli ve izole çağrı yapar."""
@@ -55,21 +56,17 @@ class UltraReasoningAgent:
     def process_request(self, user_message, context_history, file_contents, mode):
         """Üretici -> Eleştirmen -> Düzeltici ajan döngüsünü yöneten ana metot."""
         
-        # Temel bağlam oluşturuluyor
         base_prompt = f"Geçmiş Bağlam:\n{context_history}\n\nKullanıcı İletisi: {user_message}"
         
-        # Eğer mod hızlı ise döngüye girmeden doğrudan yanıt üretilir (Zaman optimizasyonu)
         if mode == "fast":
             print("⚡ Hızlı Mod: Tek aşamalı üretim yapılıyor...", flush=True)
             return self._execute_call(SISTEM_KIMLIGI_YAZICI, base_prompt, file_contents, temperature=0.5)
             
         print("🧠 Düşünen Mod: 3 Aşamalı Ajan Döngüsü Başlatıldı...", flush=True)
         
-        # ADIM 1: İlk Kod ve Çözüm Taslağının Üretilmesi (Draft Generation)
         print("-> [Ajan 1] Çözüm taslağı oluşturuluyor...", flush=True)
         ilk_taslak = self._execute_call(SISTEM_KIMLIGI_YAZICI, base_prompt, file_contents, temperature=0.2)
         
-        # ADIM 2: Kodun Eleştirmen Ajan Tarafından Denetlenmesi (Code Review)
         print("-> [Ajan 2] Kod denetimi ve güvenlik analizi yapılıyor...", flush=True)
         elestiri_prompt = f"Denetlenecek Kod ve Çözüm:\n{ilk_taslak}\n\nOrijinal Kullanıcı İsteği: {user_message}"
         elestiri_raporu = self._execute_call(SISTEM_KIMLIGI_ELESTIRMEN, elestiri_prompt, [], temperature=0.1)
@@ -80,7 +77,6 @@ class UltraReasoningAgent:
             
         print(f"🚨 Eleştirmen kusurlar buldu! Yeniden düzenleme aşamasına geçiliyor.\nRapor:\n{elestiri_raporu}", flush=True)
         
-        # ADIM 3: Eleştiri Raporuna Göre Kodun Refaktör Edilmesi (Refinement)
         print("-> [Ajan 3] Eleştiri raporu doğrultusunda kod yeniden yapılandırılıyor...", flush=True)
         duzeltme_prompt = (
             f"Orijinal Kullanıcı İsteği: {user_message}\n\n"
@@ -100,7 +96,6 @@ def ask_ai(mesaj, user_id="default_user", image_path=None, mode="thinking"):
     
     contents = []
     
-    # Dosya girdilerinin asistan bağlamına dahil edilmesi
     if image_path and os.path.exists(image_path):
         if image_path.lower().endswith(".pdf"):
             pdf_metin = ""
@@ -120,7 +115,6 @@ def ask_ai(mesaj, user_id="default_user", image_path=None, mode="thinking"):
                 pass
 
     try:
-        # Ajan döngüsü başlatılıyor
         agent = UltraReasoningAgent(api_key=GEMINI_API_KEY)
         cevap = agent.process_request(mesaj, gecmis, contents, mode)
         
@@ -130,18 +124,25 @@ def ask_ai(mesaj, user_id="default_user", image_path=None, mode="thinking"):
     except Exception as gemini_err:
         print(f"🚨 Ana Beyin Hatası: {gemini_err}. Yedek hatta geçiliyor...", flush=True)
         try:
-            # Yedek motor (Ollama / Qwen-Coder) hattı
             payload = {
                 "model": "qwen2.5-coder:7b",
                 "prompt": f"{SISTEM_KIMLIGI_YAZICI}\n\nBağlam:\n{gecmis}\n\nMesaj: {mesaj}",
                 "stream": False
             }
-            res = requests.post(NGROK_LINK, json=payload, timeout=60)
+            # NGROK 404/403 HATASINI ENGELLEYEN HEADER EKLENDİ
+            headers = {
+                "ngrok-skip-browser-warning": "true",
+                "Content-Type": "application/json"
+            }
+            res = requests.post(NGROK_LINK, json=payload, headers=headers, timeout=60)
+            
             if res.status_code == 200:
                 cevap = res.json().get("response", "Yerel model yanıt üretemedi.")
                 hafizaya_ekle(cevap, kaynak_adi=user_id)
                 return cevap
             else:
                 return f"⚠️ Yedek motor sunucu hatası verdi (HTTP {res.status_code}).\nAna Beyin Hatası: {gemini_err}"
+        except requests.exceptions.ConnectionError:
+            return f"⚠️ Yedek motora ulaşılamıyor (Bağlantı reddedildi). Ngrok URL'sini güncelleyin veya bilgisayarınızda Ollama'yı açın.\nAna Beyin (Gemini) hatası: {gemini_err}"
         except Exception as ollama_err:
             return f"⚠️ Kritik Sistem Çökmesi. Ana beyin ve yedek motor yanıt vermiyor.\nGemini: {gemini_err}\nOllama: {ollama_err}"
