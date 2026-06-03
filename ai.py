@@ -39,15 +39,25 @@ class KeremAI:
         )
         return response.text
 
+
 # Telegram botunun ve Web panelin kullandığı ana fonksiyon
 def ask_ai(mesaj, user_id="default_user", image_path=None):
     try:
-        # Şifreyi güvenli bir şekilde çekiyoruz
+        # YÖNTEM 1: Standart çekme (Bazen Render'da takılıyor)
         api_key = os.environ.get("GEMINI_API_KEY")
         
-        # Eğer Render'da şifre yoksa sistemi çökertmek yerine bizi uyaracak
+        # YÖNTEM 2: Zorla çekme (Eğer None dönerse boş string değil mi diye bakar)
         if not api_key:
-            return "⚠️ Hata: GEMINI_API_KEY bulunamadı! Lütfen Render panelinden Environment sekmesine gidip şifreyi eklediğinden emin ol."
+            api_key = os.getenv("GEMINI_API_KEY")
+            
+        # YÖNTEM 3: Render'ın gizli çevre değişkenlerine direkt erişim (En agresif yöntem)
+        if not api_key and "GEMINI_API_KEY" in os.environ:
+            api_key = os.environ["GEMINI_API_KEY"]
+
+        # Hâlâ bulamadıysa, ekrana yazdığımız değişken isimlerinin bir listesini versin ki hatayı görelim
+        if not api_key:
+            mevcut_degiskenler = ", ".join(list(os.environ.keys())[:5]) # İlk 5 değişkeni göster
+            return f"⚠️ Hata: GEMINI_API_KEY bulunamadı! Şifreyi okuyamıyorum. Şu an görebildiğim değişkenler: {mevcut_degiskenler}..."
             
         agent = KeremAI(api_key=api_key)
         cevap = agent.process_request(mesaj, image_path)
