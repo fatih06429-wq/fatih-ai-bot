@@ -5,7 +5,7 @@ from google import genai
 from google.genai import types
 
 # DİKKAT: Render'da da çalışan, yeni aldığın o sıfır kotalı Gemini API şifreni buraya yapıştır!
-GEMINI_API_KEY = "AIzaSy...BURAYA_GERCEK_SIFREN_GELECEK"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 SISTEM_KIMLIGI_YAZICI = """
 Sen, dünya çapında uzman bir yapay zeka asistanı olan Kerem AI'sın.
