@@ -1,15 +1,17 @@
 import os
 import json
 import threading
-import asyncio
 import time
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 
-from ai import ask_ai
-from hafiza import hafizayi_temizle
+from ai import ask_ai # Temizlenmiş ai.py dosyasından çağırıyoruz
+
+# Hafıza RAG ile birlikte silindiği için hafıza temizleme kısımlarını atlıyoruz.
+# from hafiza import hafizayi_temizle 
+
 import firebase_admin
 from firebase_admin import credentials, firestore
 
@@ -17,7 +19,7 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# 1. FIREBASE BASLATMA
+# --- 1. FIREBASE BASLATMA ---
 try:
     firebase_json_str = os.environ.get("FIREBASE_JSON")
     if firebase_json_str:
@@ -30,7 +32,7 @@ except Exception as e:
     print(f"❌ Firebase baslatma hatasi: {e}", flush=True)
 
 
-# 2. TAM TASARIMLI ARAYUZ
+# --- 2. TAM TASARIMLI ARAYUZ ---
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -443,9 +445,10 @@ HTML_SAYFASI = """
 </html>
 """
 
-# 3. FLASK ROUTE'LARI
+# --- 3. FLASK ROUTE'LARI ---
 @app.route("/")
-def ana_sayfa(): return render_template_string(HTML_SAYFASI)
+def ana_sayfa(): 
+    return render_template_string(HTML_SAYFASI)
 
 @app.route("/api/sohbetler", methods=["GET"])
 def sohbetleri_getir():
@@ -471,7 +474,6 @@ def sohbet_sil():
     if not session_id: return jsonify({"status": "error"}), 400
     try:
         firestore.client().collection("web_sohbetler").document(session_id).delete()
-        hafizayi_temizle(session_id)
         return jsonify({"status": "success"})
     except: return jsonify({"status": "error"}), 500
 
@@ -484,7 +486,6 @@ def sohbet_sil_tum():
         docs = db_client.collection("web_sohbetler").where("user_id", "==", user_id).stream()
         for doc in docs:
             doc.reference.delete()
-            hafizayi_temizle(doc.id)
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -494,7 +495,6 @@ def soru_cevapla():
     mesaj = request.form.get("mesaj", "")
     session_id = request.form.get("session_id", "default")
     user_id = request.form.get("user_id", "default")
-    secilen_mod = request.form.get("mode", "thinking")
     
     dosya_yolu = None
     if 'dosya' in request.files and request.files['dosya'].filename:
@@ -504,7 +504,8 @@ def soru_cevapla():
     if dosya_yolu and not mesaj.strip():
         mesaj = "Lütfen içeriğini metin olarak sana sunduğum bu dokümanı analiz et ve detaylı bir özetini çıkar."
 
-    cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu, mode=secilen_mod)
+    # mode parametresi kaldırıldığı için sadece gerekli parametreleri gönderiyoruz
+    cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu)
     
     if dosya_yolu and os.path.exists(dosya_yolu): os.remove(dosya_yolu)
     
@@ -515,9 +516,9 @@ def soru_cevapla():
     except: pass
     return jsonify({"cevap": cevap})
 
-# 4. TELEGRAM BOT FONKSIYONLARI
+# --- 4. TELEGRAM BOT FONKSIYONLARI ---
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE): 
-    reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}", mode="thinking")
+    reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
     await update.message.reply_text(reply)
 
 async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -527,7 +528,7 @@ async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         file = await context.bot.get_file(update.message.voice.file_id)
         await file.download_to_drive(dosya_adi)
-        reply = ask_ai("Bu sesli mesaja yanit ver.", user_id, image_path=dosya_adi, mode="fast")
+        reply = ask_ai("Bu sesli mesaja yanit ver.", user_id, image_path=dosya_adi)
         await bekleme.edit_text(reply)
     finally:
         if os.path.exists(dosya_adi): os.remove(dosya_adi)
@@ -535,13 +536,11 @@ async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = f"tg_{update.message.from_user.id}"
     await update.message.reply_text("📥 Dosya alindi, analiz ediliyor...")
-    # Dosya işleme mantığı buraya
+    # Dosya işleme mantığı buraya eklenebilir
     await update.message.reply_text("Dosya analizi tamamlandı.")
 
 async def temizle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = f"tg_{update.message.from_user.id}"
-    hafizayi_temizle(user_id)
-    await update.message.reply_text("🧹 Hafizan sifirlandi!")
+    await update.message.reply_text("🧹 Hafıza zaten RAG ile kaldırıldığı için bu işlem geçersiz kılındı.")
 
 def run_telegram_bot():
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -559,15 +558,12 @@ def run_telegram_bot():
     print("🚀 Telegram bot polling başlatılıyor...", flush=True)
     app_bot.run_polling(drop_pending_updates=True)
 
-# 5. UYGULAMAYI BAŞLATMA
+# --- 5. UYGULAMAYI BAŞLATMA ---
 if __name__ == '__main__':
-    # 1. Flask Web Sunucusunu Arka Planda Başlat (Thread ile)
-    # Werkzeug sunucusunun ana thread'i işgal etmesini engelliyoruz
     def start_flask():
         try:
             port = int(os.environ.get("PORT", 10000))
             print(f"🌐 Web sunucusu {port} portunda başlatılıyor...", flush=True)
-            # use_reloader=False ve threaded=True ÇOK ÖNEMLİ
             app.run(host="0.0.0.0", port=port, use_reloader=False, threaded=True)
         except Exception as e:
             print(f"❌ Web sunucusu hatası: {e}", flush=True)
@@ -575,11 +571,8 @@ if __name__ == '__main__':
     web_thread = threading.Thread(target=start_flask, daemon=True)
     web_thread.start()
     
-    # Render'ın portu algılaması için küçük bir bekleme süresi
     time.sleep(2)
 
-    # 2. Telegram Botunu ANA İş Parçacığında (Main Thread) Başlat
-    # Hatanın çözümü budur: Telegram main thread'de olmak zorundadır.
     try:
         run_telegram_bot()
     except Exception as e:
