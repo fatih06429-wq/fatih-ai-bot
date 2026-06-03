@@ -13,7 +13,7 @@ class KeremAI:
     def __init__(self, api_key):
         self.client = genai.Client(api_key=api_key)
         # Model 1.5 Flash'tan doğrudan 3.1 Pro zirvesine yükseltildi!
-        self.model_name = 'gemini-1.5-pro'
+        self.model_name = 'gemini-1.5-pro-002'
 
     def process_request(self, prompt, image_path=None):
         contents = []
