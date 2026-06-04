@@ -2,15 +2,17 @@ import os
 import json
 import threading
 import time
+import smtplib
+import random
+import string
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 
-from ai import ask_ai # Temizlenmiş ai.py dosyasından çağırıyoruz
-
-# Hafıza RAG ile birlikte silindiği için hafıza temizleme kısımlarını atlıyoruz.
-# from hafiza import hafizayi_temizle 
+from ai import ask_ai 
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -32,7 +34,46 @@ except Exception as e:
     print(f"❌ Firebase baslatma hatasi: {e}", flush=True)
 
 
-# --- 2. TAM TASARIMLI ARAYUZ ---
+# --- MAIL GONDERIM MOTORU ---
+def onay_kodu_uret():
+    return ''.join(random.choices(string.digits, k=6))
+
+def onay_maili_gonder(alici_mail, kod):
+    gonderici_mail = os.environ.get("GMAIL_ADRESIN") 
+    gonderici_sifre = os.environ.get("EMAIL_SIFRE")  
+    
+    if not gonderici_mail or not gonderici_sifre:
+        return False, "Sunucu mail ayarları eksik! Lütfen GMAIL_ADRESIN ve EMAIL_SIFRE değişkenlerini ekleyin."
+
+    mesaj = MIMEMultipart()
+    mesaj['From'] = f"Kerem AI <{gonderici_mail}>"
+    mesaj['To'] = alici_mail
+    mesaj['Subject'] = "Kerem AI - Üyelik Onay Kodunuz"
+
+    html_icerik = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; text-align: center;">
+        <h2 style="color: #333;">Aramıza Hoş Geldiniz!</h2>
+        <p style="color: #666; font-size: 16px;">Kerem AI'a giriş yapmak için tek kullanımlık onay kodunuz aşağıdadır:</p>
+        <div style="background-color: #f4f4f4; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h1 style="color: #0b57d0; font-size: 36px; letter-spacing: 5px; margin: 0;">{kod}</h1>
+        </div>
+        <p style="color: #999; font-size: 12px;">Eğer bu işlemi siz yapmadıysanız, lütfen bu e-postayı dikkate almayın.</p>
+    </div>
+    """
+    mesaj.attach(MIMEText(html_icerik, 'html'))
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(gonderici_mail, gonderici_sifre)
+        server.send_message(mesaj)
+        server.quit()
+        return True, "Mail başarıyla gönderildi."
+    except Exception as e:
+        return False, f"Mail gönderim hatası: {e}"
+
+
+# --- 2. TAM TASARIMLI ARAYUZ (AUTH EKLENDI) ---
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -84,6 +125,34 @@ HTML_SAYFASI = """
         }
         
         input, .message { -webkit-user-select: text; user-select: text; }
+
+        /* --- AUTH EKRANI CSS --- */
+        #auth-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: var(--bg-color);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 9999; transition: opacity 0.5s;
+        }
+        .auth-box {
+            background-color: var(--sidebar-bg); padding: 40px; border-radius: 20px;
+            border: 1px solid var(--bot-border); width: 350px; text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .auth-box h2 { margin-top: 0; margin-bottom: 10px; font-weight: 600; color: var(--text-color);}
+        .auth-box p { color: #888; font-size: 14px; margin-bottom: 25px; }
+        .auth-input {
+            width: 100%; box-sizing: border-box; padding: 12px 15px; margin-bottom: 20px;
+            border-radius: 10px; border: 1px solid var(--input-border);
+            background-color: var(--input-bg); color: var(--text-color); font-size: 15px; outline: none; transition: 0.2s;
+        }
+        .auth-input:focus { border-color: var(--accent); }
+        .auth-btn {
+            width: 100%; padding: 12px; background-color: var(--text-color); color: var(--bg-color);
+            border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s;
+        }
+        .auth-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .auth-spinner { display: none; width: 16px; height: 16px; border: 2px solid var(--bg-color); border-top-color: transparent; border-radius: 50%; animation: spin 1s infinite; vertical-align: middle; margin-right: 5px;}
+        /* ---------------------- */
 
         .sidebar { width: 260px; background-color: var(--sidebar-bg); border-right: 1px solid var(--bot-border); display: flex; flex-direction: column; padding: 15px; z-index: 20;}
         .new-chat-btn { background-color: var(--hover-bg); border: 1px solid var(--bot-border); color: var(--text-color); padding: 12px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: 600; margin-bottom: 20px; transition: 0.2s; width: 100%; box-sizing: border-box;}
@@ -145,6 +214,27 @@ HTML_SAYFASI = """
     </style>
 </head>
 <body>
+
+    <div id="auth-screen">
+        <div class="auth-box" id="auth-step-1">
+            <h2>✨ Kerem AI</h2>
+            <p>Sisteme erişmek için e-posta adresinizi girin.</p>
+            <input type="email" id="auth-email" class="auth-input" placeholder="ornek@gmail.com" onkeypress="if(event.key === 'Enter') mailGonder()">
+            <button class="auth-btn" onclick="mailGonder()">
+                <span class="auth-spinner" id="btn1-spinner"></span> Kod Gönder
+            </button>
+        </div>
+        
+        <div class="auth-box" id="auth-step-2" style="display: none;">
+            <h2>Güvenlik Kodu</h2>
+            <p>E-posta adresinize gönderilen 6 haneli kodu girin.</p>
+            <input type="text" id="auth-code" class="auth-input" placeholder="123456" maxlength="6" onkeypress="if(event.key === 'Enter') koduDogrula()">
+            <button class="auth-btn" onclick="koduDogrula()">
+                <span class="auth-spinner" id="btn2-spinner"></span> Onayla ve Giriş Yap
+            </button>
+            <div style="margin-top: 15px; cursor: pointer; font-size: 12px; color: var(--accent);" onclick="document.getElementById('auth-step-2').style.display='none'; document.getElementById('auth-step-1').style.display='block';">Geri Dön</div>
+        </div>
+    </div>
     <div class="sidebar">
         <button class="new-chat-btn" onclick="yeniSohbet()">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 
@@ -155,6 +245,10 @@ HTML_SAYFASI = """
             <button onclick="tumSohbetleriSil()" style="background:transparent; border:none; color:#ff5252; cursor:pointer; font-size:12px; opacity:0.8; font-weight:bold;" title="Tum Sohbetleri Sil">🗑️ Tumunu Sil</button>
         </div>
         <div class="history-list" id="sidebar-list"></div>
+        <div style="margin-top:auto; padding-top:15px; border-top: 1px solid var(--bot-border); text-align:center; font-size:12px; color:#888;">
+            Oturum: <span id="user-email-display"></span><br>
+            <a href="#" onclick="cikisYap()" style="color:#ff5252; text-decoration:none;">Çıkış Yap</a>
+        </div>
     </div>
 
     <div class="main-content">
@@ -206,7 +300,83 @@ HTML_SAYFASI = """
     <script>
         marked.setOptions({ breaks: true });
         
+        // --- AUTH KONTROLU VE MANTIGI ---
         let deviceId = localStorage.getItem("kerem_device_id");
+        let userEmail = localStorage.getItem("kerem_user_email");
+        
+        if (userEmail) {
+            // Eger kullanici onceden giris yapmissa Auth ekranini gizle
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('user-email-display').innerText = userEmail;
+        }
+
+        async function mailGonder() {
+            const email = document.getElementById("auth-email").value;
+            if(!email.includes("@")) return alert("Lütfen geçerli bir e-posta girin.");
+            
+            document.getElementById("btn1-spinner").style.display = "inline-block";
+            
+            try {
+                const response = await fetch('/api/kayit_ol', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email })
+                });
+                const data = await response.json();
+                
+                if (data.durum === "basarili") {
+                    document.getElementById('auth-step-1').style.display = 'none';
+                    document.getElementById('auth-step-2').style.display = 'block';
+                } else {
+                    alert(data.mesaj);
+                }
+            } catch (error) { alert("Sunucuyla bağlantı kurulamadı."); }
+            
+            document.getElementById("btn1-spinner").style.display = "none";
+        }
+
+        async function koduDogrula() {
+            const email = document.getElementById("auth-email").value;
+            const kod = document.getElementById("auth-code").value;
+            if(!kod) return alert("Lütfen kodu girin.");
+
+            document.getElementById("btn2-spinner").style.display = "inline-block";
+            
+            try {
+                const response = await fetch('/api/kodu_onayla', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email, kod: kod })
+                });
+                const data = await response.json();
+                
+                if (data.durum === "basarili") {
+                    // Giris basarili, maili kaydet ve chat ekranini ac
+                    userEmail = email;
+                    localStorage.setItem("kerem_user_email", email);
+                    
+                    if (!deviceId) { 
+                        deviceId = "user_" + Math.random().toString(36).substr(2, 9); 
+                        localStorage.setItem("kerem_device_id", deviceId); 
+                    }
+                    
+                    document.getElementById('user-email-display').innerText = userEmail;
+                    document.getElementById('auth-screen').style.display = 'none';
+                    location.reload(); // Chat baglantilarini yenilemek icin
+                } else {
+                    alert(data.mesaj);
+                }
+            } catch (error) { alert("Sunucuyla bağlantı kurulamadı."); }
+            
+            document.getElementById("btn2-spinner").style.display = "none";
+        }
+
+        function cikisYap() {
+            localStorage.removeItem("kerem_user_email");
+            location.reload();
+        }
+        // ------------------------------
+
         if (!deviceId) { deviceId = "user_" + Math.random().toString(36).substr(2, 9); localStorage.setItem("kerem_device_id", deviceId); }
         let currentSessionId = deviceId + "_" + Date.now();
         let isFirstMessage = true;
@@ -319,8 +489,9 @@ HTML_SAYFASI = """
         } else { micBtn.style.display = "none"; }
 
         async function sohbetleriYukle() {
+            if(!userEmail) return; // Sadece giris yapanlara yukle
             try {
-                const res = await fetch('/api/sohbetler?user_id=' + deviceId);
+                const res = await fetch('/api/sohbetler?user_id=' + userEmail);
                 const data = await res.json();
                 const list = document.getElementById('sidebar-list');
                 list.innerHTML = '';
@@ -355,7 +526,7 @@ HTML_SAYFASI = """
         async function tumSohbetleriSil() {
             if(!confirm("Tum sohbet gecmisini kalici olarak silmek istediginize emin misiniz? Bu islem geri alinamaz!")) return;
             try {
-                const res = await fetch('/api/sohbet/sil-tum?user_id=' + deviceId, { method: 'DELETE' });
+                const res = await fetch('/api/sohbet/sil-tum?user_id=' + userEmail, { method: 'DELETE' });
                 const data = await res.json();
                 if(data.status === "success") { yeniSohbet(); }
             } catch(e) { alert("Silme islemi sirasinda hata olustu."); }
@@ -413,7 +584,7 @@ HTML_SAYFASI = """
             const formData = new FormData();
             formData.append("mesaj", currentMsg);
             formData.append("session_id", currentSessionId); 
-            formData.append("user_id", deviceId);
+            formData.append("user_id", userEmail); // Artik deviceId degil Email kaydediyoruz
             formData.append("mode", document.getElementById("ai-mode").value);
             
             if (fileInput.files.length > 0) formData.append("dosya", fileInput.files[0]);
@@ -449,6 +620,57 @@ HTML_SAYFASI = """
 @app.route("/")
 def ana_sayfa(): 
     return render_template_string(HTML_SAYFASI)
+
+# --- YENİ EKLENEN AUTH ROUTE'LARI ---
+@app.route('/api/kayit_ol', methods=['POST'])
+def kayit_ol():
+    data = request.json
+    email = data.get('email')
+    
+    if not email:
+        return jsonify({"durum": "hata", "mesaj": "Lütfen e-posta adresi girin."}), 400
+
+    kod = onay_kodu_uret()
+    
+    try:
+        firestore.client().collection('onay_bekleyenler').document(email).set({
+            'kod': kod,
+            'email': email,
+            'zaman': firestore.SERVER_TIMESTAMP
+        })
+        
+        basarili, mesaj = onay_maili_gonder(email, kod)
+        
+        if basarili:
+            return jsonify({"durum": "basarili", "mesaj": "Kod mailinize gönderildi!"})
+        else:
+            return jsonify({"durum": "hata", "mesaj": mesaj}), 500
+    except Exception as e:
+        return jsonify({"durum": "hata", "mesaj": str(e)}), 500
+
+@app.route('/api/kodu_onayla', methods=['POST'])
+def kodu_onayla():
+    data = request.json
+    email = data.get('email')
+    girilen_kod = data.get('kod')
+
+    try:
+        doc_ref = firestore.client().collection('onay_bekleyenler').document(email)
+        doc = doc_ref.get()
+
+        if doc.exists and doc.to_dict().get('kod') == girilen_kod:
+            firestore.client().collection('aktif_uyeler').document(email).set({
+                'email': email,
+                'durum': 'onayli',
+                'kayit_tarihi': firestore.SERVER_TIMESTAMP
+            })
+            doc_ref.delete() 
+            return jsonify({"durum": "basarili", "mesaj": "Üyeliğiniz onaylandı!"})
+        else:
+            return jsonify({"durum": "hata", "mesaj": "Geçersiz onay kodu!"}), 400
+    except Exception as e:
+        return jsonify({"durum": "hata", "mesaj": str(e)}), 500
+# -------------------------------------
 
 @app.route("/api/sohbetler", methods=["GET"])
 def sohbetleri_getir():
@@ -504,7 +726,6 @@ def soru_cevapla():
     if dosya_yolu and not mesaj.strip():
         mesaj = "Lütfen içeriğini metin olarak sana sunduğum bu dokümanı analiz et ve detaylı bir özetini çıkar."
 
-    # mode parametresi kaldırıldığı için sadece gerekli parametreleri gönderiyoruz
     cevap = ask_ai(mesaj, user_id=session_id, image_path=dosya_yolu)
     
     if dosya_yolu and os.path.exists(dosya_yolu): os.remove(dosya_yolu)
@@ -536,7 +757,6 @@ async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = f"tg_{update.message.from_user.id}"
     await update.message.reply_text("📥 Dosya alindi, analiz ediliyor...")
-    # Dosya işleme mantığı buraya eklenebilir
     await update.message.reply_text("Dosya analizi tamamlandı.")
 
 async def temizle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
