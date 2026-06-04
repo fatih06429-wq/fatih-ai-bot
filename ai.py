@@ -95,3 +95,4 @@ def ask_ai(mesaj, user_id="default_user", image_path=None):
         
     except Exception as e:
         return f"⚠️ Kerem AI Kritik Hatası: {e}"
+    # GROQ GECISI ZORUNLU KONTROL
