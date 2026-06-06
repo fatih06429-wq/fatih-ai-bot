@@ -2,17 +2,12 @@ import os
 import json
 import threading
 import time
-import smtplib
-import random
-import string
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 
-from ai import ask_ai 
+from ai import ask_ai
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -33,57 +28,14 @@ try:
 except Exception as e:
     print(f"❌ Firebase baslatma hatasi: {e}", flush=True)
 
-
-# --- MAIL GONDERIM MOTORU ---
-def onay_kodu_uret():
-    return ''.join(random.choices(string.digits, k=6))
-
-def onay_maili_gonder(alici_mail, kod):
-    gonderici_mail = os.environ.get("GMAIL_ADRESIN") 
-    gonderici_sifre = os.environ.get("EMAIL_SIFRE")  
-    
-    if not gonderici_mail or not gonderici_sifre:
-        return False, "Sunucu mail ayarları eksik! Lütfen Render panelinden GMAIL_ADRESIN ve EMAIL_SIFRE ekleyin."
-
-    mesaj = MIMEMultipart()
-    mesaj['From'] = f"Kerem AI <{gonderici_mail}>"
-    mesaj['To'] = alici_mail
-    mesaj['Subject'] = "Kerem AI - Giriş Doğrulama Kodunuz"
-
-    html_icerik = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; text-align: center;">
-        <h2 style="color: #333;">Kerem AI Doğrulama</h2>
-        <p style="color: #666; font-size: 16px;">Uygulamaya giriş yapmak için tek kullanımlık onay kodunuz aşağıdadır:</p>
-        <div style="background-color: #f4f4f4; padding: 15px; border-radius: 8px; margin: 20px 0;">
-            <h1 style="color: #0b57d0; font-size: 36px; letter-spacing: 5px; margin: 0;">{kod}</h1>
-        </div>
-        <p style="color: #999; font-size: 12px;">Eğer bu işlemi siz yapmadıysanız, lütfen bu e-postayı dikkate almayın.</p>
-    </div>
-    """
-    mesaj.attach(MIMEText(html_icerik, 'html'))
-
-    try:
-        # TIMEOUT EKLENDİ (10 Saniye limit)
-        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=10)
-        server.starttls()
-        server.login(gonderici_mail, gonderici_sifre)
-        server.send_message(mesaj)
-        server.quit()
-        return True, "Mail başarıyla gönderildi."
-    except smtplib.SMTPAuthenticationError:
-        return False, "Gmail şifresi reddedildi! Lütfen 16 haneli Uygulama Şifrenizin doğru olduğundan emin olun."
-    except Exception as e:
-        return False, f"Mail gönderim hatası (Zaman aşımı veya Güvenlik Duvarı): {str(e)}"
-
-
-# --- 2. TAM TASARIMLI ARAYUZ (GERCEK SIFRESIZ GIRIS SISTEMI) ---
+# --- 2. TAM TASARIMLI ARAYUZ (AUTH YOK) ---
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kerem AI - Oturum açın</title>
+    <title>Kerem AI - Yapay Zeka Asistani</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root {
@@ -99,12 +51,9 @@ HTML_SAYFASI = """
             --accent: #a8c7fa; 
             --hover-bg: #282a2c;
             --icon-color: #e3e3e3;
-            --google-card-bg: #1f1f1f;
-            --google-border: #747775;
-            --google-btn-text: #052e59;
         }
         [data-theme="light"] {
-            --bg-color: #f0f4f9; 
+            --bg-color: #ffffff; 
             --chat-bg: #ffffff; 
             --sidebar-bg: #f0f4f9;
             --text-color: #1f1f1f; 
@@ -116,12 +65,9 @@ HTML_SAYFASI = """
             --accent: #0b57d0; 
             --hover-bg: #e1e5ea;
             --icon-color: #444746;
-            --google-card-bg: #ffffff;
-            --google-border: #747775;
-            --google-btn-text: #ffffff;
         }
         body { 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             background-color: var(--bg-color); 
             color: var(--text-color); 
             margin: 0; 
@@ -134,72 +80,6 @@ HTML_SAYFASI = """
         }
         
         input, .message { -webkit-user-select: text; user-select: text; }
-
-        /* --- GOOGLE MATERIAL 3 AUTH EKRANI CSS --- */
-        #auth-screen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: var(--bg-color);
-            display: flex; justify-content: center; align-items: center;
-            z-index: 9999; transition: opacity 0.5s;
-        }
-        .google-card {
-            background-color: var(--google-card-bg);
-            border-radius: 28px;
-            width: 100%; max-width: 448px;
-            padding: 48px 40px 36px 40px;
-            box-sizing: border-box;
-            text-align: left;
-            display: flex; flex-direction: column;
-        }
-        .google-logo svg {
-            width: 48px; height: 48px; fill: var(--accent); margin-bottom: 8px;
-        }
-        .google-title {
-            font-size: 32px; font-weight: 400; margin: 16px 0 8px 0; color: var(--text-color);
-        }
-        .google-subtitle {
-            font-size: 16px; font-weight: 400; color: var(--text-color); margin: 0 0 40px 0; opacity: 0.8;
-        }
-        .google-input-wrapper { position: relative; margin-bottom: 30px; }
-        .google-input {
-            width: 100%; height: 56px; box-sizing: border-box;
-            padding: 16px 14px; border-radius: 4px;
-            border: 1px solid var(--google-border);
-            background: transparent; color: var(--text-color); font-size: 16px;
-            outline: none; transition: 0.2s;
-        }
-        .google-input:focus {
-            border: 2px solid var(--accent); padding: 15px 13px;
-        }
-        .google-input::placeholder { color: transparent; }
-        .google-label {
-            position: absolute; left: 14px; top: 18px; color: var(--google-border);
-            font-size: 16px; transition: 0.2s; pointer-events: none; background: var(--google-card-bg); padding: 0 4px;
-        }
-        .google-input:focus ~ .google-label, .google-input:not(:placeholder-shown) ~ .google-label {
-            top: -9px; left: 10px; font-size: 12px; color: var(--accent);
-        }
-        .google-input:not(:focus):not(:placeholder-shown) ~ .google-label { color: var(--google-border); }
-        
-        .google-actions {
-            display: flex; justify-content: flex-end; align-items: center; margin-top: 24px;
-        }
-        .google-text-btn {
-            background: transparent; border: none; color: var(--accent); font-size: 14px;
-            font-weight: 500; cursor: pointer; padding: 8px 16px; border-radius: 4px; transition: 0.2s; margin-right: 15px;
-        }
-        .google-text-btn:hover { background-color: rgba(168, 199, 250, 0.08); }
-        .google-primary-btn {
-            background-color: var(--accent); color: var(--google-btn-text);
-            border: none; border-radius: 100px; padding: 0 24px; height: 40px;
-            font-size: 14px; font-weight: 500; cursor: pointer; transition: 0.2s;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .google-primary-btn:hover { opacity: 0.9; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        .google-primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .auth-spinner { display: none; width: 14px; height: 14px; border: 2px solid var(--google-btn-text); border-top-color: transparent; border-radius: 50%; animation: spin 1s infinite; margin-right: 8px;}
-        /* ---------------------- */
 
         .sidebar { width: 260px; background-color: var(--sidebar-bg); border-right: 1px solid var(--bot-border); display: flex; flex-direction: column; padding: 15px; z-index: 20;}
         .new-chat-btn { background-color: var(--hover-bg); border: 1px solid var(--bot-border); color: var(--text-color); padding: 12px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: 600; margin-bottom: 20px; transition: 0.2s; width: 100%; box-sizing: border-box;}
@@ -240,6 +120,8 @@ HTML_SAYFASI = """
         
         .spinner { width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s infinite; display: inline-block;}
         @keyframes spin { 100% { transform: rotate(360deg); } }
+        .listening { animation: pulse-mic 1s infinite; background-color: #ff5252 !important; color: white !important; }
+        @keyframes pulse-mic { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
 
         #input-container { padding: 10px 15% 25px 15%; background-color: var(--bg-color); display: flex; flex-direction: column; align-items: center; transition: background-color 0.3s; }
         .input-capsule { display: flex; background-color: var(--input-bg); border: 1px solid var(--input-border); border-radius: 35px; padding: 6px 14px 6px 14px; align-items: center; width: 100%; max-width: 750px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: 0.3s; }
@@ -259,52 +141,6 @@ HTML_SAYFASI = """
     </style>
 </head>
 <body>
-
-    <!-- GOOGLE MATERIAL 3 AUTH EKRANI -->
-    <div id="auth-screen">
-        <!-- 1. Adim: E-Posta Girisi -->
-        <div class="google-card" id="auth-step-1">
-            <div class="google-logo">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-            </div>
-            <h1 class="google-title">Oturum açın</h1>
-            <p class="google-subtitle">Şifresiz olarak Kerem AI hesabınıza devam edin</p>
-            
-            <div class="google-input-wrapper">
-                <input type="email" id="auth-email" class="google-input" placeholder=" " onkeypress="if(event.key === 'Enter') mailGonder()">
-                <label class="google-label">E-posta adresi</label>
-            </div>
-            
-            <div class="google-actions">
-                <button class="google-primary-btn" id="btn1" onclick="mailGonder()">
-                    <span class="auth-spinner" id="btn1-spinner"></span> İleri
-                </button>
-            </div>
-        </div>
-        
-        <!-- 2. Adim: Kod Girisi -->
-        <div class="google-card" id="auth-step-2" style="display: none;">
-            <div class="google-logo">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-            </div>
-            <h1 class="google-title">Doğrulama Kodu</h1>
-            <p class="google-subtitle">E-posta adresinize gönderilen 6 haneli kodu girin</p>
-            
-            <div class="google-input-wrapper">
-                <input type="text" id="auth-code" class="google-input" placeholder=" " maxlength="6" onkeypress="if(event.key === 'Enter') koduDogrula()">
-                <label class="google-label">Kodu girin</label>
-            </div>
-            
-            <div class="google-actions">
-                <button class="google-text-btn" onclick="document.getElementById('auth-step-2').style.display='none'; document.getElementById('auth-step-1').style.display='flex';">Geri Dön</button>
-                <button class="google-primary-btn" id="btn2" onclick="koduDogrula()">
-                    <span class="auth-spinner" id="btn2-spinner"></span> Onayla
-                </button>
-            </div>
-        </div>
-    </div>
-    <!-- /AUTH EKRANI -->
-
     <div class="sidebar">
         <button class="new-chat-btn" onclick="yeniSohbet()">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 
@@ -315,10 +151,6 @@ HTML_SAYFASI = """
             <button onclick="tumSohbetleriSil()" style="background:transparent; border:none; color:#ff5252; cursor:pointer; font-size:12px; opacity:0.8; font-weight:bold;" title="Tum Sohbetleri Sil">🗑️ Tumunu Sil</button>
         </div>
         <div class="history-list" id="sidebar-list"></div>
-        <div style="margin-top:auto; padding-top:15px; border-top: 1px solid var(--bot-border); text-align:center; font-size:12px; color:#888;">
-            Oturum: <span id="user-email-display"></span><br>
-            <a href="#" onclick="cikisYap()" style="color:#ff5252; text-decoration:none;">Çıkış Yap</a>
-        </div>
     </div>
 
     <div class="main-content">
@@ -355,6 +187,10 @@ HTML_SAYFASI = """
                     <option value="fast">⚡ Hizli Mod</option>
                 </select>
                 
+                <button class="capsule-btn" id="mic-btn" title="Basili Tutarak Konus">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                </button>
+                
                 <button class="capsule-btn" onclick="mesajGonder()" title="Mesaji Gonder">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                 </button>
@@ -367,97 +203,17 @@ HTML_SAYFASI = """
         marked.setOptions({ breaks: true });
         
         let deviceId = localStorage.getItem("kerem_device_id");
-        let userEmail = localStorage.getItem("kerem_user_email");
-        
-        if (userEmail) {
-            document.getElementById('auth-screen').style.display = 'none';
-            document.getElementById('user-email-display').innerText = userEmail;
-        }
-
-        async function mailGonder() {
-            const email = document.getElementById("auth-email").value;
-            if(!email.includes("@")) return alert("Lütfen geçerli bir e-posta girin.");
-            
-            const btn = document.getElementById("btn1");
-            const spinner = document.getElementById("btn1-spinner");
-            
-            btn.disabled = true;
-            spinner.style.display = "inline-block";
-            
-            try {
-                const response = await fetch('/api/kayit_ol', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email })
-                });
-                const data = await response.json();
-                
-                if (data.durum === "basarili") {
-                    document.getElementById('auth-step-1').style.display = 'none';
-                    document.getElementById('auth-step-2').style.display = 'flex';
-                } else {
-                    alert("Hata: " + data.mesaj);
-                }
-            } catch (error) { 
-                alert("Sunucu yanıt vermedi! E-posta ayarlarınızı veya ağ bağlantınızı kontrol edin."); 
-            } finally {
-                btn.disabled = false;
-                spinner.style.display = "none";
-            }
-        }
-
-        async function koduDogrula() {
-            const email = document.getElementById("auth-email").value;
-            const kod = document.getElementById("auth-code").value;
-            if(!kod) return alert("Lütfen kodu girin.");
-
-            const btn = document.getElementById("btn2");
-            const spinner = document.getElementById("btn2-spinner");
-            
-            btn.disabled = true;
-            spinner.style.display = "inline-block";
-            
-            try {
-                const response = await fetch('/api/kodu_onayla', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email, kod: kod })
-                });
-                const data = await response.json();
-                
-                if (data.durum === "basarili") {
-                    userEmail = email;
-                    localStorage.setItem("kerem_user_email", email);
-                    
-                    if (!deviceId) { 
-                        deviceId = "user_" + Math.random().toString(36).substr(2, 9); 
-                        localStorage.setItem("kerem_device_id", deviceId); 
-                    }
-                    
-                    document.getElementById('user-email-display').innerText = userEmail;
-                    document.getElementById('auth-screen').style.display = 'none';
-                    location.reload(); 
-                } else {
-                    alert(data.mesaj);
-                }
-            } catch (error) { 
-                alert("Sunucuyla bağlantı kurulamadı."); 
-            } finally {
-                btn.disabled = false;
-                spinner.style.display = "none";
-            }
-        }
-
-        function cikisYap() {
-            localStorage.removeItem("kerem_user_email");
-            location.reload();
-        }
-
         if (!deviceId) { deviceId = "user_" + Math.random().toString(36).substr(2, 9); localStorage.setItem("kerem_device_id", deviceId); }
         let currentSessionId = deviceId + "_" + Date.now();
         let isFirstMessage = true;
+
+        const micBtn = document.getElementById("mic-btn");
         const userInput = document.getElementById("user-input");
         const fileInput = document.getElementById("file-input");
+        let recognition;
+        let isListening = false;
+        let isSpeaking = false;
+        let currentSpeakingBtn = null;
 
         const kaydedilenTema = localStorage.getItem("kerem_theme") || "dark";
         if (kaydedilenTema === "light") {
@@ -487,10 +243,80 @@ HTML_SAYFASI = """
             }
         }
 
+        function stripMarkdown(text) { return text.replace(/[*#`~_]/g, ''); }
+
+        function sesliOkuElement(btn) {
+            const wrapper = btn.closest('.message-wrapper');
+            const botMsg = wrapper.querySelector('.bot-msg');
+            
+            if (isSpeaking && currentSpeakingBtn === btn) {
+                window.speechSynthesis.cancel();
+                btn.innerHTML = '🔊 Dinle';
+                isSpeaking = false;
+                currentSpeakingBtn = null;
+                return;
+            }
+
+            window.speechSynthesis.cancel();
+            document.querySelectorAll('.btn-dinle').forEach(b => b.innerHTML = '🔊 Dinle');
+
+            if (botMsg) {
+                const textToRead = botMsg.innerText.replace(/🔊 Dinle/g, "").replace(/⏹️ Durdur/g, "").trim();
+                btn.innerHTML = '⏹️ Durdur';
+                isSpeaking = true;
+                currentSpeakingBtn = btn;
+                const s = new SpeechSynthesisUtterance(stripMarkdown(textToRead));
+                s.lang = 'tr-TR';
+                s.onend = s.onerror = () => { btn.innerHTML = '🔊 Dinle'; isSpeaking = false; currentSpeakingBtn = null; };
+                window.speechSynthesis.speak(s);
+            }
+        }
+
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = navigator.language || 'tr-TR';
+            recognition.continuous = false;
+            recognition.interimResults = true; 
+            
+            recognition.onstart = () => { 
+                isListening = true; 
+                micBtn.classList.add("listening"); 
+                userInput.placeholder = "Dinliyorum, konusun ve birakin..."; 
+            };
+            
+            recognition.onresult = (e) => { 
+                let interimTranscript = '';
+                let finalTranscript = '';
+                for (let i = e.resultIndex; i < e.results.length; ++i) {
+                    if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+                    else interimTranscript += e.results[i][0].transcript;
+                }
+                if(finalTranscript) userInput.value = (userInput.value + " " + finalTranscript).trim();
+                else if(interimTranscript) userInput.placeholder = interimTranscript; 
+            };
+            
+            recognition.onend = () => { 
+                isListening = false; 
+                micBtn.classList.remove("listening"); 
+                userInput.placeholder = "Kerem'e bir sey sor..."; 
+                if (userInput.value.trim() !== "") mesajGonder(); 
+            };
+            
+            const startRecord = (e) => { e.preventDefault(); if(!isListening) { try { recognition.start(); } catch(err){} } };
+            const stopRecord = (e) => { e.preventDefault(); if(isListening) { recognition.stop(); } };
+
+            micBtn.addEventListener('mousedown', startRecord);
+            micBtn.addEventListener('mouseup', stopRecord);
+            micBtn.addEventListener('mouseleave', stopRecord); 
+            micBtn.addEventListener('touchstart', startRecord);
+            micBtn.addEventListener('touchend', stopRecord);
+            
+        } else { micBtn.style.display = "none"; }
+
         async function sohbetleriYukle() {
-            if(!userEmail) return;
             try {
-                const res = await fetch('/api/sohbetler?user_id=' + userEmail);
+                const res = await fetch('/api/sohbetler?user_id=' + deviceId);
                 const data = await res.json();
                 const list = document.getElementById('sidebar-list');
                 list.innerHTML = '';
@@ -525,7 +351,7 @@ HTML_SAYFASI = """
         async function tumSohbetleriSil() {
             if(!confirm("Tum sohbet gecmisini kalici olarak silmek istediginize emin misiniz? Bu islem geri alinamaz!")) return;
             try {
-                const res = await fetch('/api/sohbet/sil-tum?user_id=' + userEmail, { method: 'DELETE' });
+                const res = await fetch('/api/sohbet/sil-tum?user_id=' + deviceId, { method: 'DELETE' });
                 const data = await res.json();
                 if(data.status === "success") { yeniSohbet(); }
             } catch(e) { alert("Silme islemi sirasinda hata olustu."); }
@@ -568,18 +394,22 @@ HTML_SAYFASI = """
             const fileInput = document.getElementById("file-input");
             
             if (!currentMsg.trim() && fileInput.files.length === 0) return;
+            
             if (isFirstMessage) { document.getElementById("welcome-screen").style.display = "none"; }
             
             const chat = document.getElementById("chat-container");
+            
             let displayMsg = currentMsg;
-            if (fileInput.files.length > 0) { displayMsg = "📎 <b>" + fileInput.files[0].name + "</b>" + (currentMsg ? "<br>" + currentMsg : ""); }
+            if (fileInput.files.length > 0) {
+                displayMsg = "📎 <b>" + fileInput.files[0].name + "</b>" + (currentMsg ? "<br>" + currentMsg : "");
+            }
             
             chat.innerHTML += '<div class="message-wrapper"><div class="message user-msg">' + displayMsg + '</div></div>';
             
             const formData = new FormData();
             formData.append("mesaj", currentMsg);
             formData.append("session_id", currentSessionId); 
-            formData.append("user_id", userEmail);
+            formData.append("user_id", deviceId);
             formData.append("mode", document.getElementById("ai-mode").value);
             
             if (fileInput.files.length > 0) formData.append("dosya", fileInput.files[0]);
@@ -596,8 +426,10 @@ HTML_SAYFASI = """
                 const response = await fetch("/api/sor", { method: "POST", body: formData });
                 const data = await response.json();
                 const botBox = document.getElementById(typingId);
+                
                 botBox.innerHTML = "";
                 await daktiloEfekti(botBox, data.cevap);
+                botBox.innerHTML += '<div class="msg-actions"><button class="action-icon btn-dinle" onclick="sesliOkuElement(this)">🔊 Dinle</button></div>';
                 if(isFirstMessage) { sohbetleriYukle(); isFirstMessage = false; }
             } catch (error) { document.getElementById(typingId).innerHTML = "Baglanti hatasi."; }
             
@@ -613,55 +445,6 @@ HTML_SAYFASI = """
 @app.route("/")
 def ana_sayfa(): 
     return render_template_string(HTML_SAYFASI)
-
-@app.route('/api/kayit_ol', methods=['POST'])
-def kayit_ol():
-    data = request.json
-    email = data.get('email')
-    
-    if not email:
-        return jsonify({"durum": "hata", "mesaj": "Lütfen e-posta adresi girin."}), 400
-
-    kod = onay_kodu_uret()
-    
-    try:
-        firestore.client().collection('onay_bekleyenler').document(email).set({
-            'kod': kod,
-            'email': email,
-            'zaman': firestore.SERVER_TIMESTAMP
-        })
-        
-        basarili, mesaj = onay_maili_gonder(email, kod)
-        
-        if basarili:
-            return jsonify({"durum": "basarili", "mesaj": "Kod mailinize gönderildi!"})
-        else:
-            return jsonify({"durum": "hata", "mesaj": mesaj}), 500
-    except Exception as e:
-        return jsonify({"durum": "hata", "mesaj": str(e)}), 500
-
-@app.route('/api/kodu_onayla', methods=['POST'])
-def kodu_onayla():
-    data = request.json
-    email = data.get('email')
-    girilen_kod = data.get('kod')
-
-    try:
-        doc_ref = firestore.client().collection('onay_bekleyenler').document(email)
-        doc = doc_ref.get()
-
-        if doc.exists and doc.to_dict().get('kod') == girilen_kod:
-            firestore.client().collection('aktif_uyeler').document(email).set({
-                'email': email,
-                'durum': 'onayli',
-                'kayit_tarihi': firestore.SERVER_TIMESTAMP
-            })
-            doc_ref.delete() 
-            return jsonify({"durum": "basarili", "mesaj": "Üyeliğiniz onaylandı!"})
-        else:
-            return jsonify({"durum": "hata", "mesaj": "Geçersiz onay kodu!"}), 400
-    except Exception as e:
-        return jsonify({"durum": "hata", "mesaj": str(e)}), 500
 
 @app.route("/api/sohbetler", methods=["GET"])
 def sohbetleri_getir():
