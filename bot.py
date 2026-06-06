@@ -43,17 +43,17 @@ def onay_maili_gonder(alici_mail, kod):
     gonderici_sifre = os.environ.get("EMAIL_SIFRE")  
     
     if not gonderici_mail or not gonderici_sifre:
-        return False, "Sunucu mail ayarları eksik! Lütfen GMAIL_ADRESIN ve EMAIL_SIFRE değişkenlerini ekleyin."
+        return False, "Sunucu mail ayarları eksik! Lütfen Render panelinden GMAIL_ADRESIN ve EMAIL_SIFRE ekleyin."
 
     mesaj = MIMEMultipart()
     mesaj['From'] = f"Kerem AI <{gonderici_mail}>"
     mesaj['To'] = alici_mail
-    mesaj['Subject'] = "Kerem AI - Üyelik Onay Kodunuz"
+    mesaj['Subject'] = "Kerem AI - Giriş Doğrulama Kodunuz"
 
     html_icerik = f"""
     <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; text-align: center;">
-        <h2 style="color: #333;">Aramıza Hoş Geldiniz!</h2>
-        <p style="color: #666; font-size: 16px;">Kerem AI'a giriş yapmak için tek kullanımlık onay kodunuz aşağıdadır:</p>
+        <h2 style="color: #333;">Kerem AI Doğrulama</h2>
+        <p style="color: #666; font-size: 16px;">Uygulamaya giriş yapmak için tek kullanımlık onay kodunuz aşağıdadır:</p>
         <div style="background-color: #f4f4f4; padding: 15px; border-radius: 8px; margin: 20px 0;">
             <h1 style="color: #0b57d0; font-size: 36px; letter-spacing: 5px; margin: 0;">{kod}</h1>
         </div>
@@ -63,17 +63,20 @@ def onay_maili_gonder(alici_mail, kod):
     mesaj.attach(MIMEText(html_icerik, 'html'))
 
     try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
+        # TIMEOUT EKLENDİ (10 Saniye limit)
+        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=10)
         server.starttls()
         server.login(gonderici_mail, gonderici_sifre)
         server.send_message(mesaj)
         server.quit()
         return True, "Mail başarıyla gönderildi."
+    except smtplib.SMTPAuthenticationError:
+        return False, "Gmail şifresi reddedildi! Lütfen 16 haneli Uygulama Şifrenizin doğru olduğundan emin olun."
     except Exception as e:
-        return False, f"Mail gönderim hatası: {e}"
+        return False, f"Mail gönderim hatası (Zaman aşımı veya Güvenlik Duvarı): {str(e)}"
 
 
-# --- 2. TAM TASARIMLI ARAYUZ (GEMINI MATERIAL 3 AUTH) ---
+# --- 2. TAM TASARIMLI ARAYUZ (GERCEK SIFRESIZ GIRIS SISTEMI) ---
 HTML_SAYFASI = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -157,7 +160,7 @@ HTML_SAYFASI = """
         .google-subtitle {
             font-size: 16px; font-weight: 400; color: var(--text-color); margin: 0 0 40px 0; opacity: 0.8;
         }
-        .google-input-wrapper { position: relative; margin-bottom: 10px; }
+        .google-input-wrapper { position: relative; margin-bottom: 30px; }
         .google-input {
             width: 100%; height: 56px; box-sizing: border-box;
             padding: 16px 14px; border-radius: 4px;
@@ -166,7 +169,7 @@ HTML_SAYFASI = """
             outline: none; transition: 0.2s;
         }
         .google-input:focus {
-            border: 2px solid var(--accent); padding: 15px 13px; /* border kalinlasinca paddingi azaltiyoruz */
+            border: 2px solid var(--accent); padding: 15px 13px;
         }
         .google-input::placeholder { color: transparent; }
         .google-label {
@@ -178,14 +181,12 @@ HTML_SAYFASI = """
         }
         .google-input:not(:focus):not(:placeholder-shown) ~ .google-label { color: var(--google-border); }
         
-        .google-help-text { font-size: 14px; color: var(--accent); font-weight: 500; cursor: pointer; margin-bottom: 40px; display: inline-block;}
-        
         .google-actions {
-            display: flex; justify-content: space-between; align-items: center; margin-top: 24px;
+            display: flex; justify-content: flex-end; align-items: center; margin-top: 24px;
         }
         .google-text-btn {
             background: transparent; border: none; color: var(--accent); font-size: 14px;
-            font-weight: 500; cursor: pointer; padding: 8px; border-radius: 4px; transition: 0.2s;
+            font-weight: 500; cursor: pointer; padding: 8px 16px; border-radius: 4px; transition: 0.2s; margin-right: 15px;
         }
         .google-text-btn:hover { background-color: rgba(168, 199, 250, 0.08); }
         .google-primary-btn {
@@ -195,11 +196,11 @@ HTML_SAYFASI = """
             display: flex; align-items: center; justify-content: center;
         }
         .google-primary-btn:hover { opacity: 0.9; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .google-primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
         .auth-spinner { display: none; width: 14px; height: 14px; border: 2px solid var(--google-btn-text); border-top-color: transparent; border-radius: 50%; animation: spin 1s infinite; margin-right: 8px;}
         /* ---------------------- */
 
-        /* Geri kalan sohbet CSS kodlari birebir ayni */
         .sidebar { width: 260px; background-color: var(--sidebar-bg); border-right: 1px solid var(--bot-border); display: flex; flex-direction: column; padding: 15px; z-index: 20;}
         .new-chat-btn { background-color: var(--hover-bg); border: 1px solid var(--bot-border); color: var(--text-color); padding: 12px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: 600; margin-bottom: 20px; transition: 0.2s; width: 100%; box-sizing: border-box;}
         .new-chat-btn:hover { border-color: var(--accent); }
@@ -267,17 +268,15 @@ HTML_SAYFASI = """
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
             </div>
             <h1 class="google-title">Oturum açın</h1>
-            <p class="google-subtitle">Kerem AI hesabınıza devam edin</p>
+            <p class="google-subtitle">Şifresiz olarak Kerem AI hesabınıza devam edin</p>
             
             <div class="google-input-wrapper">
                 <input type="email" id="auth-email" class="google-input" placeholder=" " onkeypress="if(event.key === 'Enter') mailGonder()">
-                <label class="google-label">E-posta veya telefon</label>
+                <label class="google-label">E-posta adresi</label>
             </div>
-            <span class="google-help-text" onclick="alert('Demo versiyonu, şimdilik mailinizi girmeniz yeterli.')">E-posta adresinizi mi unuttunuz?</span>
             
             <div class="google-actions">
-                <button class="google-text-btn">Hesap oluşturun</button>
-                <button class="google-primary-btn" onclick="mailGonder()">
+                <button class="google-primary-btn" id="btn1" onclick="mailGonder()">
                     <span class="auth-spinner" id="btn1-spinner"></span> İleri
                 </button>
             </div>
@@ -288,18 +287,17 @@ HTML_SAYFASI = """
             <div class="google-logo">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
             </div>
-            <h1 class="google-title">2 Adımlı Doğrulama</h1>
-            <p class="google-subtitle">Bu e-postaya gönderilen 6 haneli kodu girin</p>
+            <h1 class="google-title">Doğrulama Kodu</h1>
+            <p class="google-subtitle">E-posta adresinize gönderilen 6 haneli kodu girin</p>
             
             <div class="google-input-wrapper">
                 <input type="text" id="auth-code" class="google-input" placeholder=" " maxlength="6" onkeypress="if(event.key === 'Enter') koduDogrula()">
                 <label class="google-label">Kodu girin</label>
             </div>
-            <span class="google-help-text" onclick="document.getElementById('auth-step-2').style.display='none'; document.getElementById('auth-step-1').style.display='flex';">Geri Dön</span>
             
             <div class="google-actions">
-                <button class="google-text-btn">Kodu tekrar gönder</button>
-                <button class="google-primary-btn" onclick="koduDogrula()">
+                <button class="google-text-btn" onclick="document.getElementById('auth-step-2').style.display='none'; document.getElementById('auth-step-1').style.display='flex';">Geri Dön</button>
+                <button class="google-primary-btn" id="btn2" onclick="koduDogrula()">
                     <span class="auth-spinner" id="btn2-spinner"></span> Onayla
                 </button>
             </div>
@@ -380,7 +378,11 @@ HTML_SAYFASI = """
             const email = document.getElementById("auth-email").value;
             if(!email.includes("@")) return alert("Lütfen geçerli bir e-posta girin.");
             
-            document.getElementById("btn1-spinner").style.display = "inline-block";
+            const btn = document.getElementById("btn1");
+            const spinner = document.getElementById("btn1-spinner");
+            
+            btn.disabled = true;
+            spinner.style.display = "inline-block";
             
             try {
                 const response = await fetch('/api/kayit_ol', {
@@ -392,13 +394,16 @@ HTML_SAYFASI = """
                 
                 if (data.durum === "basarili") {
                     document.getElementById('auth-step-1').style.display = 'none';
-                    document.getElementById('auth-step-2').style.display = 'flex'; // Card icin flex gerekiyor
+                    document.getElementById('auth-step-2').style.display = 'flex';
                 } else {
-                    alert(data.mesaj);
+                    alert("Hata: " + data.mesaj);
                 }
-            } catch (error) { alert("Sunucuyla bağlantı kurulamadı."); }
-            
-            document.getElementById("btn1-spinner").style.display = "none";
+            } catch (error) { 
+                alert("Sunucu yanıt vermedi! E-posta ayarlarınızı veya ağ bağlantınızı kontrol edin."); 
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = "none";
+            }
         }
 
         async function koduDogrula() {
@@ -406,7 +411,11 @@ HTML_SAYFASI = """
             const kod = document.getElementById("auth-code").value;
             if(!kod) return alert("Lütfen kodu girin.");
 
-            document.getElementById("btn2-spinner").style.display = "inline-block";
+            const btn = document.getElementById("btn2");
+            const spinner = document.getElementById("btn2-spinner");
+            
+            btn.disabled = true;
+            spinner.style.display = "inline-block";
             
             try {
                 const response = await fetch('/api/kodu_onayla', {
@@ -431,9 +440,12 @@ HTML_SAYFASI = """
                 } else {
                     alert(data.mesaj);
                 }
-            } catch (error) { alert("Sunucuyla bağlantı kurulamadı."); }
-            
-            document.getElementById("btn2-spinner").style.display = "none";
+            } catch (error) { 
+                alert("Sunucuyla bağlantı kurulamadı."); 
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = "none";
+            }
         }
 
         function cikisYap() {
@@ -776,4 +788,3 @@ if __name__ == '__main__':
         run_telegram_bot()
     except Exception as e:
         print(f"❌ BOT CRITICAL ERROR: {e}", flush=True)
-        # GEMINI TASARIMI VE MAIL SISTEMI ZORUNLU GUNCELLEME
