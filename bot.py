@@ -43,9 +43,11 @@ HTML_SAYFASI = """
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
 
-      gtag('config', 'G-XXXXXXXXXX');
+      gtag('config', 'G-6FCWEJ4KGN');
     </script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <style>
         :root {
             --bg-color: #131314; 
             --chat-bg: #131314; 
