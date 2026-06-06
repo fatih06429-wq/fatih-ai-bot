@@ -162,16 +162,13 @@ HTML_SAYFASI = """
         </div>
         
         <div id="chat-container">
-            <div id="welcome-screen" style="text-align:center; padding-top:50px;">
-                <h1 style="font-size:38px; margin-bottom:10px; font-weight:600; background: linear-gradient(45deg, #a8c7fa, #ffb6c1); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Merhaba, bugun ne kesfedelim?</h1>
-                <div class="chips-container">
-                    <div class="chip" onclick="hizliSor('AÖF ders notlarımı inceleyip benim için özet çıkarır mısın?')">📚 AOF Ders Ozeti Cikar</div>
-                    <div class="chip" onclick="hizliSor('Python kodumda hata alıyorum, mantık hatalarını nasıl ayıklayabilirim?')">💻 Python Hata Ayiklama</div>
-                    <div class="chip" onclick="hizliSor('Bana Ammice Arapça (Suudi Arabistan) günlük diyalog kalıplarıyla pratik yaptır.')">🇸🇦 Ammice Arapca Pratik</div>
-                    <div class="chip" onclick="hizliSor('Tell me a short story in English to improve my vocabulary.')">🇬🇧 Ingilizce Pratik Yap</div>
-                </div>
-            </div>
-        </div>
+    <div id="welcome-screen" style="text-align:center; padding-top:50px;">
+        <h1 style="font-size:38px; margin-bottom:10px; font-weight:600; background: linear-gradient(45deg, #a8c7fa, #ffb6c1); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Merhaba, bugun ne kesfedelim?</h1>
+        
+        <div class="chips-container" id="dynamic-chips"></div>
+        
+    </div>
+</div>
         
         <div id="input-container">
             <input type="file" id="file-input" style="display:none" accept="image/*, .pdf">
