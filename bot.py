@@ -531,7 +531,7 @@ async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Dosya analizi tamamlandı.")
 
 async def temizle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🧹 Hafıza zaten RAG ile kaldırıldığı için bu işlem geçersiz kılındı.")
+    await update.message.reply_text("🧹 Yeni bir sayfa açtık! Bana yeni bir soru sorabilirsin.")
 
 def run_telegram_bot():
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
