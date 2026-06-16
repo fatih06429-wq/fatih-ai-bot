@@ -717,6 +717,8 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"❌ BOT CRITICAL ERROR: {e}", flush=True)
 
+# --- OTOMATİK MODERASYON VE CAPTCHA FONKSİYONLARI ---
+
 async def otomatik_moderasyon(update, context):
     """Link, Reklam ve Spam korumasını yapan ana kalkan"""
     if not update.message or not update.message.text:
@@ -795,3 +797,5 @@ async def captcha_onay(update, context):
         await query.message.delete()
     else:
         await query.answer("Bu butona sadece yeni katılan kişi basabilir!", show_alert=True)
+
+# --- FONKSİYONLARIN SONU ---
