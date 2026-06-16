@@ -2,6 +2,7 @@ import os
 import json
 import threading
 import time
+import asyncio
 import re
 import time
 from telegram import ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
@@ -105,7 +106,7 @@ async def captcha_onay(update, context):
         await query.message.delete()
     else:
         await query.answer("Bu butona sadece yeni katılan kişi basabilir!", show_alert=True)
-        
+
 # --- 1. FIREBASE BASLATMA ---
 try:
     firebase_json_str = os.environ.get("FIREBASE_JSON")
@@ -736,6 +737,14 @@ async def kayit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📞 İletişim için grup yöneticilerine mesaj atabilirsiniz.")
 
+async def gecikmeli_sil(context, chat_id, message_id):
+    """10 saniye bekleyip botun kendi uyarı mesajını siler"""
+    await asyncio.sleep(10)
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except:
+        pass # Mesaj zaten silindiyse hata verme, sessizce geç
+
 # --- GÜNCELLENMİŞ ÇALIŞTIRMA FONKSİYONU ---
 def run_telegram_bot():
     # .env ile uğraşma, token'ını tırnak içine buraya yapıştır
@@ -807,73 +816,40 @@ async def otomatik_moderasyon(update, context):
     mesaj = update.message.text.lower()
     kullanici_adi = update.message.from_user.first_name
 
+    # 1. YASAKLI KELİME
     if any(kelime in mesaj for kelime in YASAKLI_KELIMELER):
         await update.message.delete()
-        await context.bot.send_message(chat_id=chat_id, text=f"⚠️ {kullanici_adi}, bu grupta yasaklı kelime kullanamazsın!")
+        uyari = await context.bot.send_message(chat_id=chat_id, text=f"⚠️ {kullanici_adi}, bu grupta yasaklı kelime kullanamazsın!")
+        asyncio.create_task(gecikmeli_sil(context, chat_id, uyari.message_id))
         return
 
+    # 2. LİNK ENGELLEYİCİ
     link_sablonu = r"(https?://|t\.me/|www\.)"
     if re.search(link_sablonu, mesaj):
         await update.message.delete()
-        await context.bot.send_message(chat_id=chat_id, text=f"🚫 {kullanici_adi}, grupta izinsiz link paylaşımı yasaktır!")
+        uyari = await context.bot.send_message(chat_id=chat_id, text=f"🚫 {kullanici_adi}, grupta izinsiz link paylaşımı yasaktır!")
+        asyncio.create_task(gecikmeli_sil(context, chat_id, uyari.message_id))
         return
 
+    # 3. FLOOD (SPAM) KORUMASI (7 saniyede 5 mesaj olarak güncellendi)
     simdi = time.time()
     if user_id not in kullanici_mesaj_zamanlari:
         kullanici_mesaj_zamanlari[user_id] = []
 
-    kullanici_mesaj_zamanlari[user_id] = [t for t in kullanici_mesaj_zamanlari[user_id] if simdi - t < 3]
+    # Süreyi 3 saniyeden 7 saniyeye çıkardık
+    kullanici_mesaj_zamanlari[user_id] = [t for t in kullanici_mesaj_zamanlari[user_id] if simdi - t < 7]
     kullanici_mesaj_zamanlari[user_id].append(simdi)
 
     if len(kullanici_mesaj_zamanlari[user_id]) >= 5:
-        await context.bot.restrict_chat_member(
-            chat_id=chat_id,
-            user_id=user_id,
-            permissions=ChatPermissions(can_send_messages=False)
-        )
-        await context.bot.send_message(chat_id=chat_id, text=f"🛑 {kullanici_adi} spam yaptığı için otomatik olarak susturuldu!")
-        kullanici_mesaj_zamanlari[user_id] = []
-
-async def yeni_uye_captcha(update, context):
-    """Yeni gelenleri dondurup buton sunan fonksiyon"""
-    for member in update.message.new_chat_members:
-        if member.id == context.bot.id:
-            continue
-
-        await context.bot.restrict_chat_member(
-            chat_id=update.message.chat_id,
-            user_id=member.id,
-            permissions=ChatPermissions(can_send_messages=False)
-        )
-
-        keyboard = [[InlineKeyboardButton("🤖 Ben İnsanım", callback_data=f"captcha_{member.id}")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await context.bot.send_message(
-            chat_id=update.message.chat_id,
-            text=f"Hoş geldin {member.first_name}! Grupta mesaj yazabilmek için insan olduğunu doğrulamalısın.",
-            reply_markup=reply_markup
-        )
-
-async def captcha_onay(update, context):
-    """Butona basıldığında kilidi açan fonksiyon"""
-    query = update.callback_query
-    tiklayan_id = query.from_user.id
-    beklenen_id = int(query.data.split("_")[1])
-
-    if tiklayan_id == beklenen_id:
-        await query.answer("Doğrulama başarılı! Artık mesaj yazabilirsin.")
-        await context.bot.restrict_chat_member(
-            chat_id=query.message.chat_id,
-            user_id=tiklayan_id,
-            permissions=ChatPermissions(
-                can_send_messages=True,
-                can_send_media_messages=True,
-                can_send_other_messages=True
+        try:
+            await context.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=user_id,
+                permissions=ChatPermissions(can_send_messages=False)
             )
-        )
-        await query.message.delete()
-    else:
-        await query.answer("Bu butona sadece yeni katılan kişi basabilir!", show_alert=True)
-
-# --- FONKSİYONLARIN SONU ---
+            uyari = await context.bot.send_message(chat_id=chat_id, text=f"🛑 {kullanici_adi} spam yaptığı için otomatik olarak susturuldu!")
+            asyncio.create_task(gecikmeli_sil(context, chat_id, uyari.message_id))
+        except Exception as e:
+            print(f"Susturma hatasi: {e}") # Eğer yetkisi yoksa Render loglarına hatayı yazdıracak
+            
+        kullanici_mesaj_zamanlari[user_id] = []
