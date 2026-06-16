@@ -102,9 +102,15 @@ class KeremAI:
 
 def ask_ai(mesaj, user_id="default_user", image_path=None):
     try:
-        api_key = os.environ.get("GROQ_API_KEY")
-        if not api_key:
-            return "⚠️ Hata: GROQ_API_KEY bulunamadı!"
+        # Anahtarını buraya yapıştır. .strip() komutu etrafındaki tüm görünmez boşlukları silecek!
+        ham_anahtar = "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"
+        api_key = ham_anahtar.strip()
+        
+        # Terminalde şifrenin neye benzediğini kendi gözümüzle görelim (başı ve sonu)
+        print(f"DEBUG: Groq Anahtarı Test -> {api_key[:10]}...{api_key[-5:]}", flush=True)
+        
+        if not api_key or "buraya_yeni_aldigin" in api_key:
+            return "⚠️ Hata: GROQ_API_KEY henüz koda yapıştırılmamış!"
             
         agent = KeremAI(api_key=api_key)
         cevap = agent.process_request(mesaj, image_path)

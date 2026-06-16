@@ -1,1 +1,9 @@
 firebase_key.json
+venv/
+env/
+.venv/
+__pycache__/
+*.pt
+*.bin
+*.safetensors
+.env

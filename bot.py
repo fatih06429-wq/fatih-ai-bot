@@ -4,8 +4,13 @@ import threading
 import time
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
-from telegram import Update
+from telegram import Update, ChatPermissions
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
+
+# --- BURAYI DEĞİŞTİR ---
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+
 
 from ai import ask_ai
 
@@ -43,9 +48,11 @@ HTML_SAYFASI = """
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
 
-      gtag('config', 'G-XXXXXXXXXX');
+      gtag('config', 'G-6FCWEJ4KGN');
     </script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <style>
         :root {
             --bg-color: #131314; 
             --chat-bg: #131314; 
@@ -517,6 +524,100 @@ def soru_cevapla():
     return jsonify({"cevap": cevap})
 
 # --- 4. TELEGRAM BOT FONKSIYONLARI ---
+
+# YÖNETİCİ KONTROL SİSTEMİ (Yetkisiz Kullanımı Önlemek İçin)
+async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    if update.effective_chat.type == 'private':
+        return False
+    chat_member = await context.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
+    return chat_member.status in ['administrator', 'creator']
+
+# --- MODERASYON KOMUTLARI (Rose Özellikleri) ---
+async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        return await update.message.reply_text("⛔ Bu komutu sadece yöneticiler kullanabilir.")
+    if not update.message.reply_to_message:
+        return await update.message.reply_text("Lütfen yasaklamak istediğiniz kişinin bir mesajını yanıtlayarak /ban yazın.")
+    
+    target_user = update.message.reply_to_message.from_user
+    try:
+        await context.bot.ban_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id)
+        await update.message.reply_text(f"🔨 {target_user.first_name} Kerem AI tarafından gruptan kalıcı olarak yasaklandı.")
+    except Exception:
+        await update.message.reply_text("Bu işlemi yapmaya yetkim yok. Lütfen bana 'Kullanıcıları Yasaklama' yetkisi verin.")
+
+        from telegram import Update
+from telegram.ext import ContextTypes, CommandHandler
+
+async def ban_kullanici(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Komut bir mesaja yanıt olarak mı atılmış kontrol et
+    if not update.message.reply_to_message:
+        await update.message.reply_text("Kimi gruptan atacağımı anlamam için onun bir mesajına yanıt vererek /ban yazmalısın.")
+        return
+
+    hedef_kullanici = update.message.reply_to_message.from_user
+    sohbet_id = update.effective_chat.id
+
+    try:
+        # Kullanıcıyı gruptan yasakla (Ban)
+        await context.bot.ban_chat_member(chat_id=sohbet_id, user_id=hedef_kullanici.id)
+        await update.message.reply_text(f"💥 {hedef_kullanici.first_name} adlı kullanıcı Kerem AI tarafından acımasızca gruptan uzaklaştırıldı!")
+    except Exception as e:
+        await update.message.reply_text("⚠️ Bu kişiyi banlayamıyorum. Ya benim 'Kullanıcıları Yasakla' yetkim yok ya da o kişi de bir yönetici.")
+
+async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context): return
+    if not update.message.reply_to_message: return await update.message.reply_text("Bir mesajı yanıtlayın.")
+    
+    target_user = update.message.reply_to_message.from_user
+    try:
+        await context.bot.unban_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id, only_if_banned=True)
+        await update.message.reply_text(f"✅ {target_user.first_name} adlı kişinin yasağı kaldırıldı.")
+    except Exception:
+        await update.message.reply_text("Bir hata oluştu veya yetkim yetersiz.")
+
+async def kick_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context): return
+    if not update.message.reply_to_message: return await update.message.reply_text("Bir mesajı yanıtlayın.")
+    
+    target_user = update.message.reply_to_message.from_user
+    try:
+        await context.bot.ban_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id)
+        await context.bot.unban_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id)
+        await update.message.reply_text(f"👢 {target_user.first_name} gruptan atıldı (tekrar katılabilir).")
+    except Exception:
+        await update.message.reply_text("Yetkim yetersiz.")
+
+async def mute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context): return
+    if not update.message.reply_to_message: return await update.message.reply_text("Bir mesajı yanıtlayın.")
+    
+    target_user = update.message.reply_to_message.from_user
+    try:
+        permissions = ChatPermissions(can_send_messages=False)
+        await context.bot.restrict_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id, permissions=permissions)
+        await update.message.reply_text(f"🤐 {target_user.first_name} sessize alındı. Artık mesaj gönderemez.")
+    except Exception:
+        await update.message.reply_text("Yetkim yetersiz.")
+
+async def unmute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context): return
+    if not update.message.reply_to_message: return await update.message.reply_text("Bir mesajı yanıtlayın.")
+    
+    target_user = update.message.reply_to_message.from_user
+    try:
+        permissions = ChatPermissions(
+            can_send_messages=True, can_send_audios=True, can_send_documents=True,
+            can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
+            can_send_voice_notes=True, can_send_polls=True, can_send_other_messages=True,
+            can_add_web_page_previews=True
+        )
+        await context.bot.restrict_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id, permissions=permissions)
+        await update.message.reply_text(f"🔊 {target_user.first_name} artık konuşabilir.")
+    except Exception:
+        await update.message.reply_text("Yetkim yetersiz.")
+
+# --- STANDART KOMUTLAR ---
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE): 
     reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
     await update.message.reply_text(reply)
@@ -541,15 +642,42 @@ async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def temizle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🧹 Yeni bir sayfa açtık! Bana yeni bir soru sorabilirsin.")
 
+async def sinavtarihi_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📅 Yaklaşan AÖF Sınav Tarihleri:\n(Buraya güncel tarihleri yazabilirsin)")
+
+async def kayit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📝 AÖF Kayıt Yenileme Dönemleri:\n(Buraya kayıt dönemlerini yazabilirsin)")
+
+async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📞 İletişim için grup yöneticilerine mesaj atabilirsiniz.")
+
+# --- GÜNCELLENMİŞ ÇALIŞTIRMA FONKSİYONU ---
 def run_telegram_bot():
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if not token:
-        print("❌ HATA: TELEGRAM_BOT_TOKEN tanımlı değil!", flush=True)
+    # .env ile uğraşma, token'ını tırnak içine buraya yapıştır
+    token = "8736315853:AAHBp8IoQX4i8GsBFJ96jfZnQCUTFXIHdkQ"
+    
+    if not token or "BURAYA" in token:
+        print("❌ HATA: Telegram Token'ı kodun içinde tanımlanmamış!", flush=True)
         return
     
     app_bot = Application.builder().token(token).build()
+    # ... (kodun kalanı aynı kalacak)
+    
+    # Moderasyon Komutları
+    app_bot.add_handler(CommandHandler("ban", ban_command))
+    app_bot.add_handler(CommandHandler("unban", unban_command))
+    app_bot.add_handler(CommandHandler("kick", kick_command))
+    app_bot.add_handler(CommandHandler("mute", mute_command))
+    app_bot.add_handler(CommandHandler("unmute", unmute_command))
+    
+    # Bilgi ve Sistem Komutları
     app_bot.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Kerem AI Hazir.")))
     app_bot.add_handler(CommandHandler("temizle", temizle_command)) 
+    app_bot.add_handler(CommandHandler("sinavtarihi", sinavtarihi_command))
+    app_bot.add_handler(CommandHandler("kayit", kayit_command))
+    app_bot.add_handler(CommandHandler("iletisim", iletisim_command))
+    
+    # Medya ve Normal Metin İşleyiciler
     app_bot.add_handler(MessageHandler(filters.Document.PDF, dosya_al))
     app_bot.add_handler(MessageHandler(filters.VOICE, ses_al))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
