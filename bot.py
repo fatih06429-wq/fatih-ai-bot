@@ -745,7 +745,6 @@ if __name__ == '__main__':
     if user_id not in kullanici_mesaj_zamanlari:
         kullanici_mesaj_zamanlari[user_id] = []
 
-    # Sadece son 3 saniyedeki mesajların zamanlarını tut
     kullanici_mesaj_zamanlari[user_id] = [t for t in kullanici_mesaj_zamanlari[user_id] if simdi - t < 3]
     kullanici_mesaj_zamanlari[user_id].append(simdi)
 
@@ -756,22 +755,20 @@ if __name__ == '__main__':
             permissions=ChatPermissions(can_send_messages=False)
         )
         await context.bot.send_message(chat_id=chat_id, text=f"🛑 {kullanici_adi} spam yaptığı için otomatik olarak susturuldu!")
-        kullanici_mesaj_zamanlari[user_id] = [] # Listeyi sıfırla
+        kullanici_mesaj_zamanlari[user_id] = []
 
 async def yeni_uye_captcha(update, context):
     """Yeni gelenleri dondurup buton sunan fonksiyon"""
     for member in update.message.new_chat_members:
-        if member.id == context.bot.id: # Botun kendisi girerse es geç
+        if member.id == context.bot.id:
             continue
 
-        # Kullanıcıyı sustur (Mute)
         await context.bot.restrict_chat_member(
             chat_id=update.message.chat_id,
             user_id=member.id,
             permissions=ChatPermissions(can_send_messages=False)
         )
 
-        # Doğrulama butonu oluştur
         keyboard = [[InlineKeyboardButton("🤖 Ben İnsanım", callback_data=f"captcha_{member.id}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -789,7 +786,6 @@ async def captcha_onay(update, context):
 
     if tiklayan_id == beklenen_id:
         await query.answer("Doğrulama başarılı! Artık mesaj yazabilirsin.")
-        # Kullanıcının yetkilerini geri ver
         await context.bot.restrict_chat_member(
             chat_id=query.message.chat_id,
             user_id=tiklayan_id,
@@ -799,6 +795,6 @@ async def captcha_onay(update, context):
                 can_send_other_messages=True
             )
         )
-        await query.message.delete() # Doğrulama mesajını ekrandan temizle
+        await query.message.delete()
     else:
         await query.answer("Bu butona sadece yeni katılan kişi basabilir!", show_alert=True)
