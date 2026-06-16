@@ -737,13 +737,14 @@ async def kayit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📞 İletişim için grup yöneticilerine mesaj atabilirsiniz.")
 
-async def gecikmeli_sil(context, chat_id, message_id):
+async def gecikmeli_sil(bot, chat_id, message_id):
     """10 saniye bekleyip botun kendi uyarı mesajını siler"""
-    await asyncio.sleep(10)
     try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except:
-        pass # Mesaj zaten silindiyse hata verme, sessizce geç
+        await asyncio.sleep(10)
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        print(f"✅ Uyari mesaji ({message_id}) basariyla 10 saniye sonra silindi.")
+    except Exception as e:
+        print(f"❌ Uyari silinirken hata olustu (Yetki yok mu?): {e}")
 
 # --- GÜNCELLENMİŞ ÇALIŞTIRMA FONKSİYONU ---
 def run_telegram_bot():
@@ -816,29 +817,39 @@ async def otomatik_moderasyon(update, context):
     mesaj = update.message.text.lower()
     kullanici_adi = update.message.from_user.first_name
 
-    # 1. YASAKLI KELİME
+    # 1. YASAKLI KELİME KALKANI
     if any(kelime in mesaj for kelime in YASAKLI_KELIMELER):
-        await update.message.delete()
+        try:
+            await update.message.delete()
+        except Exception as e:
+            print(f"❌ Kullanicinin mesaji silinemedi! Botun 'Mesajlari Sil' yetkisi acik mi? Hata: {e}")
+            
         uyari = await context.bot.send_message(chat_id=chat_id, text=f"⚠️ {kullanici_adi}, bu grupta yasaklı kelime kullanamazsın!")
-        asyncio.create_task(gecikmeli_sil(context, chat_id, uyari.message_id))
+        asyncio.create_task(gecikmeli_sil(context.bot, chat_id, uyari.message_id))
         return
 
     # 2. LİNK ENGELLEYİCİ
     link_sablonu = r"(https?://|t\.me/|www\.)"
     if re.search(link_sablonu, mesaj):
-        await update.message.delete()
+        try:
+            await update.message.delete()
+        except Exception as e:
+            print(f"❌ Link mesaji silinemedi! Botun 'Mesajlari Sil' yetkisi acik mi? Hata: {e}")
+            
         uyari = await context.bot.send_message(chat_id=chat_id, text=f"🚫 {kullanici_adi}, grupta izinsiz link paylaşımı yasaktır!")
-        asyncio.create_task(gecikmeli_sil(context, chat_id, uyari.message_id))
+        asyncio.create_task(gecikmeli_sil(context.bot, chat_id, uyari.message_id))
         return
 
-    # 3. FLOOD (SPAM) KORUMASI (7 saniyede 5 mesaj olarak güncellendi)
+    # 3. FLOOD (SPAM) KORUMASI
     simdi = time.time()
     if user_id not in kullanici_mesaj_zamanlari:
         kullanici_mesaj_zamanlari[user_id] = []
 
-    # Süreyi 3 saniyeden 7 saniyeye çıkardık
     kullanici_mesaj_zamanlari[user_id] = [t for t in kullanici_mesaj_zamanlari[user_id] if simdi - t < 7]
     kullanici_mesaj_zamanlari[user_id].append(simdi)
+
+    # RÖNTGEN: Render loglarına atılan her mesajın sayısını yazdırıyoruz
+    print(f"🔍 [TEST] {kullanici_adi} son 7 saniyede {len(kullanici_mesaj_zamanlari[user_id])} mesaj atti.")
 
     if len(kullanici_mesaj_zamanlari[user_id]) >= 5:
         try:
@@ -848,8 +859,9 @@ async def otomatik_moderasyon(update, context):
                 permissions=ChatPermissions(can_send_messages=False)
             )
             uyari = await context.bot.send_message(chat_id=chat_id, text=f"🛑 {kullanici_adi} spam yaptığı için otomatik olarak susturuldu!")
-            asyncio.create_task(gecikmeli_sil(context, chat_id, uyari.message_id))
+            asyncio.create_task(gecikmeli_sil(context.bot, chat_id, uyari.message_id))
+            print(f"✅ Spam kalkanı başarılı: {kullanici_adi} susturuldu.")
         except Exception as e:
-            print(f"Susturma hatasi: {e}") # Eğer yetkisi yoksa Render loglarına hatayı yazdıracak
+            print(f"❌ Spam kalkanında susturma hatasi! Botun 'Kullanicilari Kisitla' yetkisi yok mu? Hata: {e}")
             
         kullanici_mesaj_zamanlari[user_id] = []
