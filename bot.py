@@ -712,12 +712,12 @@ if __name__ == '__main__':
     
     time.sleep(2)
 
-    try:
+    try:    
         run_telegram_bot()
     except Exception as e:
         print(f"❌ BOT CRITICAL ERROR: {e}", flush=True)
 
-        async def otomatik_moderasyon(update, context):
+async def otomatik_moderasyon(update, context):
     """Link, Reklam ve Spam korumasını yapan ana kalkan"""
     if not update.message or not update.message.text:
         return
@@ -727,20 +727,17 @@ if __name__ == '__main__':
     mesaj = update.message.text.lower()
     kullanici_adi = update.message.from_user.first_name
 
-    # 1. KÜFÜR VE YASAKLI KELİME FİLTRESİ
     if any(kelime in mesaj for kelime in YASAKLI_KELIMELER):
         await update.message.delete()
         await context.bot.send_message(chat_id=chat_id, text=f"⚠️ {kullanici_adi}, bu grupta yasaklı kelime kullanamazsın!")
         return
 
-    # 2. LİNK VE REKLAM ENGELLEYİCİ
     link_sablonu = r"(https?://|t\.me/|www\.)"
     if re.search(link_sablonu, mesaj):
         await update.message.delete()
         await context.bot.send_message(chat_id=chat_id, text=f"🚫 {kullanici_adi}, grupta izinsiz link paylaşımı yasaktır!")
         return
 
-    # 3. FLOOD (SPAM) KORUMASI (3 saniyede 5 mesaj)
     simdi = time.time()
     if user_id not in kullanici_mesaj_zamanlari:
         kullanici_mesaj_zamanlari[user_id] = []
