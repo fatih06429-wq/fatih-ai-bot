@@ -735,15 +735,27 @@ async def kayit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📞 İletişim için grup yöneticilerine mesaj atabilirsiniz.")
 
-# --- YENİ EKLENEN GÖREV HAFIZASI ---
-async def gecikmeli_sil_callback(context: ContextTypes.DEFAULT_TYPE):
-    """JobQueue ile 10 saniye sonra çalışacak kesin silme görevi"""
-    data = context.job.data
+# --- GLOBAL AYARLAR VE HAFIZA HAVUZU ---
+YASAKLI_KELIMELER = ["bahis", "kumar", "şans oyunu", "illegal"]
+kullanici_mesaj_zamanlari = {}
+
+# Python'un arka plan görevlerini hafızadan silmesini engelleyen güçlü havuz
+aktif_silme_gorevleri = set()
+
+async def gecikmeli_sil(bot, chat_id, message_id):
+    """10 saniye sessizce bekleyip mesajı dünyadan siler"""
     try:
-        await context.bot.delete_message(chat_id=data['chat_id'], message_id=data['message_id'])
-        print(f"✅ Uyarı başarıyla silindi: {data['message_id']}")
+        await asyncio.sleep(10)
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        print(f"✅ Uyari mesaji basariyla silindi: {message_id}")
     except Exception as e:
-        print(f"❌ Uyarı silinirken hata: {e}")
+        print(f"⚠️ Mesaj silinirken bir sorun oldu (belki elle silindi): {e}")
+
+def gorevi_guvenli_baslat(bot, chat_id, message_id):
+    """Görevi çöp toplayıcıya kaptırmadan güvenle tetikler"""
+    gorev = asyncio.create_task(gecikmeli_sil(bot, chat_id, message_id))
+    aktif_silme_gorevleri.add(gorev)
+    gorev.add_done_callback(aktif_silme_gorevleri.discard)
 
 # --- GÜNCELLENMİŞ ÇALIŞTIRMA FONKSİYONU ---
 def run_telegram_bot():
@@ -806,7 +818,7 @@ if __name__ == '__main__':
 
 # --- OTOMATİK MODERASYON VE CAPTCHA FONKSİYONLARI ---
 
-async def otomatik_moderasyon(update, context: ContextTypes.DEFAULT_TYPE):
+async def otomatik_moderasyon(update, context):
     """Link, Reklam ve Spam korumasını yapan ana kalkan"""
     if not update.message or not update.message.text:
         return
@@ -824,9 +836,7 @@ async def otomatik_moderasyon(update, context: ContextTypes.DEFAULT_TYPE):
             pass
             
         uyari = await context.bot.send_message(chat_id=chat_id, text=f"⚠️ {kullanici_adi}, bu grupta yasaklı kelime kullanamazsın!")
-        
-        # Telegram'ın kendi alarmını kuruyoruz (Asla silinmez)
-        context.job_queue.run_once(gecikmeli_sil_callback, 10, data={'chat_id': chat_id, 'message_id': uyari.message_id})
+        gorevi_guvenli_baslat(context.bot, chat_id, uyari.message_id)
         return
 
     # 2. LİNK ENGELLEYİCİ
@@ -838,9 +848,7 @@ async def otomatik_moderasyon(update, context: ContextTypes.DEFAULT_TYPE):
             pass
             
         uyari = await context.bot.send_message(chat_id=chat_id, text=f"🚫 {kullanici_adi}, grupta izinsiz link paylaşımı yasaktır!")
-        
-        # Telegram'ın kendi alarmını kuruyoruz
-        context.job_queue.run_once(gecikmeli_sil_callback, 10, data={'chat_id': chat_id, 'message_id': uyari.message_id})
+        gorevi_guvenli_baslat(context.bot, chat_id, uyari.message_id)
         return
 
     # 3. FLOOD (SPAM) KORUMASI
@@ -851,19 +859,30 @@ async def otomatik_moderasyon(update, context: ContextTypes.DEFAULT_TYPE):
     kullanici_mesaj_zamanlari[user_id] = [t for t in kullanici_mesaj_zamanlari[user_id] if simdi - t < 7]
     kullanici_mesaj_zamanlari[user_id].append(simdi)
 
-    mesaj_sayisi = len(kullanici_mesaj_zamanlari[user_id])
+    print(f"🔍 [FLOOD KONTROL] {kullanici_adi} son 7 saniyede {len(kullanici_mesaj_zamanlari[user_id])} mesaj atti.")
 
-    if mesaj_sayisi >= 5:
+    if len(kullanici_mesaj_zamanlari[user_id]) >= 5:
+        # ÖNEMLİ: Önce uyarı mesajını gönderiyoruz ki sistemin çalıştığı kesinleşsin!
+        uyari = await context.bot.send_message(
+            chat_id=chat_id, 
+            text=f"🛑 {kullanici_adi} spam limiti aşıldı! Otomatik kısıtlama uygulanıyor..."
+        )
+        gorevi_guvenli_baslat(context.bot, chat_id, uyari.message_id)
+
+        # Sonra susturmayı deniyoruz (Hesap adminse hata verecek ama yukarıdaki mesaj gitmiş olacak)
         try:
             await context.bot.restrict_chat_member(
                 chat_id=chat_id,
                 user_id=user_id,
                 permissions=ChatPermissions(can_send_messages=False)
             )
-            uyari = await context.bot.send_message(chat_id=chat_id, text=f"🛑 {kullanici_adi} spam yaptığı için otomatik olarak susturuldu!")
-            
-            context.job_queue.run_once(gecikmeli_sil_callback, 10, data={'chat_id': chat_id, 'message_id': uyari.message_id})
+            print(f"✅ {kullanici_adi} basariyla susturuldu.")
         except Exception as e:
-            print(f"❌ Spam kalkanında susturma hatası! Hata: {e}")
+            print(f"❌ Susturma yapilamadi (Kullanici muhtemelen admin): {e}")
+            uyari_admin = await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"ℹ️ {kullanici_adi} aslında spam yaptı ancak grupta yönetici haklarına sahip olduğu için susturulamadı."
+            )
+            gorevi_guvenli_baslat(context.bot, chat_id, uyari_admin.message_id)
             
         kullanici_mesaj_zamanlari[user_id] = []
