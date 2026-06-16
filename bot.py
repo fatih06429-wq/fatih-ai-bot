@@ -2,10 +2,14 @@ import os
 import json
 import threading
 import time
+import re
+import time
+from telegram import ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
 from telegram import Update, ChatPermissions
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
+from telegram.ext import MessageHandler, CallbackQueryHandler, filters
 
 # --- BURAYI DEĞİŞTİR ---
 from dotenv import load_dotenv
@@ -20,6 +24,9 @@ from firebase_admin import credentials, firestore
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+YASAKLI_KELIMELER = ["bahis", "kumar", "şans oyunu", "illegal"]
+kullanici_mesaj_zamanlari = {} # Flood koruması için zaman tutucu
 
 # --- 1. FIREBASE BASLATMA ---
 try:
@@ -670,6 +677,11 @@ def run_telegram_bot():
     app_bot.add_handler(CommandHandler("mute", mute_command))
     app_bot.add_handler(CommandHandler("unmute", unmute_command))
     
+    # Otomatik Kalkanlar (application yerine app_bot yazıldı)
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, otomatik_moderasyon), group=-1)
+    app_bot.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, yeni_uye_captcha))
+    app_bot.add_handler(CallbackQueryHandler(captcha_onay, pattern=r"^captcha_"))
+    
     # Bilgi ve Sistem Komutları
     app_bot.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Kerem AI Hazir.")))
     app_bot.add_handler(CommandHandler("temizle", temizle_command)) 
@@ -704,3 +716,89 @@ if __name__ == '__main__':
         run_telegram_bot()
     except Exception as e:
         print(f"❌ BOT CRITICAL ERROR: {e}", flush=True)
+
+        async def otomatik_moderasyon(update, context):
+    """Link, Reklam ve Spam korumasını yapan ana kalkan"""
+    if not update.message or not update.message.text:
+        return
+
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+    mesaj = update.message.text.lower()
+    kullanici_adi = update.message.from_user.first_name
+
+    # 1. KÜFÜR VE YASAKLI KELİME FİLTRESİ
+    if any(kelime in mesaj for kelime in YASAKLI_KELIMELER):
+        await update.message.delete()
+        await context.bot.send_message(chat_id=chat_id, text=f"⚠️ {kullanici_adi}, bu grupta yasaklı kelime kullanamazsın!")
+        return
+
+    # 2. LİNK VE REKLAM ENGELLEYİCİ
+    link_sablonu = r"(https?://|t\.me/|www\.)"
+    if re.search(link_sablonu, mesaj):
+        await update.message.delete()
+        await context.bot.send_message(chat_id=chat_id, text=f"🚫 {kullanici_adi}, grupta izinsiz link paylaşımı yasaktır!")
+        return
+
+    # 3. FLOOD (SPAM) KORUMASI (3 saniyede 5 mesaj)
+    simdi = time.time()
+    if user_id not in kullanici_mesaj_zamanlari:
+        kullanici_mesaj_zamanlari[user_id] = []
+
+    # Sadece son 3 saniyedeki mesajların zamanlarını tut
+    kullanici_mesaj_zamanlari[user_id] = [t for t in kullanici_mesaj_zamanlari[user_id] if simdi - t < 3]
+    kullanici_mesaj_zamanlari[user_id].append(simdi)
+
+    if len(kullanici_mesaj_zamanlari[user_id]) >= 5:
+        await context.bot.restrict_chat_member(
+            chat_id=chat_id,
+            user_id=user_id,
+            permissions=ChatPermissions(can_send_messages=False)
+        )
+        await context.bot.send_message(chat_id=chat_id, text=f"🛑 {kullanici_adi} spam yaptığı için otomatik olarak susturuldu!")
+        kullanici_mesaj_zamanlari[user_id] = [] # Listeyi sıfırla
+
+async def yeni_uye_captcha(update, context):
+    """Yeni gelenleri dondurup buton sunan fonksiyon"""
+    for member in update.message.new_chat_members:
+        if member.id == context.bot.id: # Botun kendisi girerse es geç
+            continue
+
+        # Kullanıcıyı sustur (Mute)
+        await context.bot.restrict_chat_member(
+            chat_id=update.message.chat_id,
+            user_id=member.id,
+            permissions=ChatPermissions(can_send_messages=False)
+        )
+
+        # Doğrulama butonu oluştur
+        keyboard = [[InlineKeyboardButton("🤖 Ben İnsanım", callback_data=f"captcha_{member.id}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=f"Hoş geldin {member.first_name}! Grupta mesaj yazabilmek için insan olduğunu doğrulamalısın.",
+            reply_markup=reply_markup
+        )
+
+async def captcha_onay(update, context):
+    """Butona basıldığında kilidi açan fonksiyon"""
+    query = update.callback_query
+    tiklayan_id = query.from_user.id
+    beklenen_id = int(query.data.split("_")[1])
+
+    if tiklayan_id == beklenen_id:
+        await query.answer("Doğrulama başarılı! Artık mesaj yazabilirsin.")
+        # Kullanıcının yetkilerini geri ver
+        await context.bot.restrict_chat_member(
+            chat_id=query.message.chat_id,
+            user_id=tiklayan_id,
+            permissions=ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_other_messages=True
+            )
+        )
+        await query.message.delete() # Doğrulama mesajını ekrandan temizle
+    else:
+        await query.answer("Bu butona sadece yeni katılan kişi basabilir!", show_alert=True)
