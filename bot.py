@@ -4,6 +4,7 @@ import threading
 import time
 import asyncio
 import re
+import datetime
 
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
@@ -680,6 +681,57 @@ YASAKLI_KELIMELER = ["bahis", "kumar", "şans oyunu", "illegal"]
 kullanici_mesaj_zamanlari = {}
 
 aktif_silme_gorevleri = set()
+aktif_gruplar = set() # Botun bulunduğu grupları hatırlaması için
+grup_durumlari = {}   # Grupların o anki açık/kapalı durumu
+
+# 🌙 GECE BEKÇİSİ (Otomatik Kapat/Aç)
+async def gece_bekcisi(bot):
+    """Her dakika saati kontrol edip 01:00 - 08:00 arası grubu kapatır"""
+    while True:
+        try:
+            # Render saatini Türkiye (UTC+3) saatine çeviriyoruz
+            simdi = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+            saat = simdi.hour
+            
+            # 01:00 ile 07:59 arası gece modudur
+            gece_mi = 1 <= saat < 8
+            
+            for chat_id in list(aktif_gruplar):
+                durum = grup_durumlari.get(chat_id, None)
+                
+                # Bot yeniden başlarsa mevcut duruma sessizce adapte olur
+                if durum is None:
+                    grup_durumlari[chat_id] = "KAPALI" if gece_mi else "ACIK"
+                    if gece_mi:
+                        await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
+                    continue
+                    
+                # Gece olduysa ve grup henüz kapatılmadıysa
+                if gece_mi and durum != "KAPALI":
+                    await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
+                    await bot.send_message(chat_id, "🌙 <b>Saat 01:00 oldu.</b>\n\nGrup sabah 08:00'a kadar mesaj gönderimine kapatılmıştır. Yöneticiler harici mesaj atılamaz. İyi geceler!", parse_mode='HTML')
+                    grup_durumlari[chat_id] = "KAPALI"
+                    
+                # Sabah olduysa ve grup kapalıysa
+                elif not gece_mi and durum == "KAPALI":
+                    permissions = ChatPermissions(
+                        can_send_messages=True, can_send_audios=True, can_send_documents=True,
+                        can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
+                        can_send_voice_notes=True, can_send_polls=True, can_send_other_messages=True,
+                        can_add_web_page_previews=True
+                    )
+                    await bot.set_chat_permissions(chat_id, permissions)
+                    await bot.send_message(chat_id, "☀️ <b>Saat 08:00 oldu.</b>\n\nGrup mesaj gönderimine açılmıştır. Herkese günaydın!", parse_mode='HTML')
+                    grup_durumlari[chat_id] = "ACIK"
+                    
+        except Exception as e:
+            print(f"Gece bekcisi hatası: {e}")
+            
+        await asyncio.sleep(60) # Her 60 saniyede bir saati denetler
+
+# Bot başlatılırken gece bekçisini arka plana atar
+async def post_init(application: Application):
+    asyncio.create_task(gece_bekcisi(application.bot))
 
 async def gecikmeli_sil(bot, chat_id, message_id):
     """10 saniye sessizce bekleyip mesajı dünyadan siler"""
@@ -702,6 +754,11 @@ async def otomatik_moderasyon(update, context):
         return
 
     chat_id = update.message.chat_id
+    
+    # Gece bekçisinin grubu hatırlaması için hafızaya alıyoruz
+    if update.message.chat and update.message.chat.type in ['group', 'supergroup']:
+        aktif_gruplar.add(chat_id)
+
     user_id = update.message.from_user.id
     mesaj = update.message.text.lower()
     kullanici_adi = update.message.from_user.first_name
@@ -764,7 +821,7 @@ def run_telegram_bot():
         print("❌ HATA: Telegram Token'ı kodun içinde tanımlanmamış!", flush=True)
         return
     
-    app_bot = Application.builder().token(token).build()
+    app_bot = Application.builder().token(token).post_init(post_init).build()
     
     # Moderasyon Komutları
     app_bot.add_handler(CommandHandler("ban", ban_command))
