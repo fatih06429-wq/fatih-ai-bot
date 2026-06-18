@@ -603,6 +603,17 @@ async def unmute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- STANDART KOMUTLAR ---
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE): 
+    mesaj = update.message.text.lower()
+
+    # Eğer mesajda sınavla ilgili kelimeler geçiyorsa direkt sınav tablosunu at
+    if any(kelime in mesaj for kelime in ["sınav tarihi", "sınavlar", "bütünleme", "vize", "final", "üç ders"]):
+        return await sinavtarihi_command(update, context)
+
+    # Eğer mesajda kayıt veya yaz okulu geçiyorsa direkt kayıt tablosunu at
+    if any(kelime in mesaj for kelime in ["kayıt", "kayit", "yaz okulu", "kayıt yenileme"]):
+        return await kayit_command(update, context)
+
+    # Eğer bu kelimeler yoksa, normal yapay zeka gibi cevap ver
     reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
     await update.message.reply_text(reply)
 
@@ -663,7 +674,7 @@ async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(mesaj, parse_mode='HTML')
 
-    
+
 # --- GLOBAL AYARLAR VE OTOMATİK MODERASYON KALKANI ---
 YASAKLI_KELIMELER = ["bahis", "kumar", "şans oyunu", "illegal"]
 kullanici_mesaj_zamanlari = {}
