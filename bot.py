@@ -719,15 +719,21 @@ grup_durumlari = {}   # Grupların o anki açık/kapalı durumu
 
 # 🌙 GECE BEKÇİSİ (Otomatik Kapat/Aç)
 async def gece_bekcisi(bot):
-    """Her dakika saati kontrol edip 01:00 - 08:00 arası grubu kapatır"""
+    """Her dakika saati kontrol edip belirlenen saatler arası grubu kapatır"""
+    
+    # --- SAAT AYARLARINI BURADAN DEGISTIREBILIRSIN ---
+    KAPANIS_SAATI = 2  # Gece kacta kapanacak (Örn: 2)
+    ACILIS_SAATI = 8   # Sabah kacta acilacak (Örn: 8)
+    # -------------------------------------------------
+
     while True:
         try:
             # Render saatini Türkiye (UTC+3) saatine çeviriyoruz
             simdi = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
             saat = simdi.hour
             
-            # 01:00 ile 07:59 arası gece modudur
-            gece_mi = 1 <= saat < 8
+            # Belirlenen saatler arası gece modudur
+            gece_mi = KAPANIS_SAATI <= saat < ACILIS_SAATI
             
             for chat_id in list(aktif_gruplar):
                 durum = grup_durumlari.get(chat_id, None)
@@ -742,7 +748,11 @@ async def gece_bekcisi(bot):
                 # Gece olduysa ve grup henüz kapatılmadıysa
                 if gece_mi and durum != "KAPALI":
                     await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
-                    await bot.send_message(chat_id, "🌙 <b>Saat 01:00 oldu.</b>\n\nGrup sabah 08:00'a kadar mesaj gönderimine kapatılmıştır. Yöneticiler harici mesaj atılamaz. İyi geceler!", parse_mode='HTML')
+                    await bot.send_message(
+                        chat_id, 
+                        f"🌙 <b>Saat 0{KAPANIS_SAATI}:00 oldu.</b>\n\nGrup sabah 0{ACILIS_SAATI}:00'a kadar mesaj gönderimine kapatılmıştır. Yöneticiler harici mesaj atılamaz. İyi geceler!", 
+                        parse_mode='HTML'
+                    )
                     grup_durumlari[chat_id] = "KAPALI"
                     
                 # Sabah olduysa ve grup kapalıysa
@@ -754,7 +764,11 @@ async def gece_bekcisi(bot):
                         can_add_web_page_previews=True
                     )
                     await bot.set_chat_permissions(chat_id, permissions)
-                    await bot.send_message(chat_id, "☀️ <b>Saat 08:00 oldu.</b>\n\nGrup mesaj gönderimine açılmıştır. Herkese günaydın!", parse_mode='HTML')
+                    await bot.send_message(
+                        chat_id, 
+                        f"☀️ <b>Saat 0{ACILIS_SAATI}:00 oldu.</b>\n\nGrup mesaj gönderimine açılmıştır. Herkese günaydın!", 
+                        parse_mode='HTML'
+                    )
                     grup_durumlari[chat_id] = "ACIK"
                     
         except Exception as e:
