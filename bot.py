@@ -24,87 +24,6 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-YASAKLI_KELIMELER = ["bahis", "kumar", "şans oyunu", "illegal"]
-kullanici_mesaj_zamanlari = {} # Flood koruması için zaman tutucu
-async def otomatik_moderasyon(update, context):
-    """Link, Reklam ve Spam korumasını yapan ana kalkan"""
-    if not update.message or not update.message.text:
-        return
-
-    chat_id = update.message.chat_id
-    user_id = update.message.from_user.id
-    mesaj = update.message.text.lower()
-    kullanici_adi = update.message.from_user.first_name
-
-    if any(kelime in mesaj for kelime in YASAKLI_KELIMELER):
-        await update.message.delete()
-        await context.bot.send_message(chat_id=chat_id, text=f"⚠️ {kullanici_adi}, bu grupta yasaklı kelime kullanamazsın!")
-        return
-
-    link_sablonu = r"(https?://|t\.me/|www\.)"
-    if re.search(link_sablonu, mesaj):
-        await update.message.delete()
-        await context.bot.send_message(chat_id=chat_id, text=f"🚫 {kullanici_adi}, grupta izinsiz link paylaşımı yasaktır!")
-        return
-
-    simdi = time.time()
-    if user_id not in kullanici_mesaj_zamanlari:
-        kullanici_mesaj_zamanlari[user_id] = []
-
-    kullanici_mesaj_zamanlari[user_id] = [t for t in kullanici_mesaj_zamanlari[user_id] if simdi - t < 3]
-    kullanici_mesaj_zamanlari[user_id].append(simdi)
-
-    if len(kullanici_mesaj_zamanlari[user_id]) >= 5:
-        await context.bot.restrict_chat_member(
-            chat_id=chat_id,
-            user_id=user_id,
-            permissions=ChatPermissions(can_send_messages=False)
-        )
-        await context.bot.send_message(chat_id=chat_id, text=f"🛑 {kullanici_adi} spam yaptığı için otomatik olarak susturuldu!")
-        kullanici_mesaj_zamanlari[user_id] = []
-
-async def yeni_uye_captcha(update, context):
-    """Yeni gelenleri dondurup buton sunan fonksiyon"""
-    for member in update.message.new_chat_members:
-        if member.id == context.bot.id:
-            continue
-
-        await context.bot.restrict_chat_member(
-            chat_id=update.message.chat_id,
-            user_id=member.id,
-            permissions=ChatPermissions(can_send_messages=False)
-        )
-
-        keyboard = [[InlineKeyboardButton("🤖 Ben İnsanım", callback_data=f"captcha_{member.id}")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await context.bot.send_message(
-            chat_id=update.message.chat_id,
-            text=f"Hoş geldin {member.first_name}! Grupta mesaj yazabilmek için insan olduğunu doğrulamalısın.",
-            reply_markup=reply_markup
-        )
-
-async def captcha_onay(update, context):
-    """Butona basıldığında kilidi açan fonksiyon"""
-    query = update.callback_query
-    tiklayan_id = query.from_user.id
-    beklenen_id = int(query.data.split("_")[1])
-
-    if tiklayan_id == beklenen_id:
-        await query.answer("Doğrulama başarılı! Artık mesaj yazabilirsin.")
-        await context.bot.restrict_chat_member(
-            chat_id=query.message.chat_id,
-            user_id=tiklayan_id,
-            permissions=ChatPermissions(
-                can_send_messages=True,
-                can_send_media_messages=True,
-                can_send_other_messages=True
-            )
-        )
-        await query.message.delete()
-    else:
-        await query.answer("Bu butona sadece yeni katılan kişi basabilir!", show_alert=True)
-
 # --- 1. FIREBASE BASLATMA ---
 try:
     firebase_json_str = os.environ.get("FIREBASE_JSON")
@@ -609,14 +528,14 @@ def soru_cevapla():
 
 # --- 4. TELEGRAM BOT FONKSIYONLARI ---
 
-# YÖNETİCİ KONTROL SİSTEMİ (Yetkisiz Kullanımı Önlemek İçin)
+# YÖNETİCİ KONTROL SİSTEMİ
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     if update.effective_chat.type == 'private':
         return False
     chat_member = await context.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
     return chat_member.status in ['administrator', 'creator']
 
-# --- MODERASYON KOMUTLARI (Rose Özellikleri) ---
+# --- MODERASYON KOMUTLARI ---
 async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return await update.message.reply_text("⛔ Bu komutu sadece yöneticiler kullanabilir.")
@@ -629,25 +548,6 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"🔨 {target_user.first_name} Kerem AI tarafından gruptan kalıcı olarak yasaklandı.")
     except Exception:
         await update.message.reply_text("Bu işlemi yapmaya yetkim yok. Lütfen bana 'Kullanıcıları Yasaklama' yetkisi verin.")
-
-        from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler
-
-async def ban_kullanici(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Komut bir mesaja yanıt olarak mı atılmış kontrol et
-    if not update.message.reply_to_message:
-        await update.message.reply_text("Kimi gruptan atacağımı anlamam için onun bir mesajına yanıt vererek /ban yazmalısın.")
-        return
-
-    hedef_kullanici = update.message.reply_to_message.from_user
-    sohbet_id = update.effective_chat.id
-
-    try:
-        # Kullanıcıyı gruptan yasakla (Ban)
-        await context.bot.ban_chat_member(chat_id=sohbet_id, user_id=hedef_kullanici.id)
-        await update.message.reply_text(f"💥 {hedef_kullanici.first_name} adlı kullanıcı Kerem AI tarafından acımasızca gruptan uzaklaştırıldı!")
-    except Exception as e:
-        await update.message.reply_text("⚠️ Bu kişiyi banlayamıyorum. Ya benim 'Kullanıcıları Yasakla' yetkim yok ya da o kişi de bir yönetici.")
 
 async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context): return
@@ -735,11 +635,10 @@ async def kayit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📞 İletişim için grup yöneticilerine mesaj atabilirsiniz.")
 
-# --- GLOBAL AYARLAR VE HAFIZA HAVUZU ---
+# --- GLOBAL AYARLAR VE OTOMATİK MODERASYON KALKANI ---
 YASAKLI_KELIMELER = ["bahis", "kumar", "şans oyunu", "illegal"]
 kullanici_mesaj_zamanlari = {}
 
-# Python'un arka plan görevlerini hafızadan silmesini engelleyen güçlü havuz
 aktif_silme_gorevleri = set()
 
 async def gecikmeli_sil(bot, chat_id, message_id):
@@ -756,67 +655,6 @@ def gorevi_guvenli_baslat(bot, chat_id, message_id):
     gorev = asyncio.create_task(gecikmeli_sil(bot, chat_id, message_id))
     aktif_silme_gorevleri.add(gorev)
     gorev.add_done_callback(aktif_silme_gorevleri.discard)
-
-# --- GÜNCELLENMİŞ ÇALIŞTIRMA FONKSİYONU ---
-def run_telegram_bot():
-    # .env ile uğraşma, token'ını tırnak içine buraya yapıştır
-    token = "8736315853:AAHBp8IoQX4i8GsBFJ96jfZnQCUTFXIHdkQ"
-    
-    if not token or "BURAYA" in token:
-        print("❌ HATA: Telegram Token'ı kodun içinde tanımlanmamış!", flush=True)
-        return
-    
-    app_bot = Application.builder().token(token).build()
-    # ... (kodun kalanı aynı kalacak)
-    
-    # Moderasyon Komutları
-    app_bot.add_handler(CommandHandler("ban", ban_command))
-    app_bot.add_handler(CommandHandler("unban", unban_command))
-    app_bot.add_handler(CommandHandler("kick", kick_command))
-    app_bot.add_handler(CommandHandler("mute", mute_command))
-    app_bot.add_handler(CommandHandler("unmute", unmute_command))
-    
-    # Otomatik Kalkanlar (application yerine app_bot yazıldı)
-    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, otomatik_moderasyon), group=-1)
-    app_bot.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, yeni_uye_captcha))
-    app_bot.add_handler(CallbackQueryHandler(captcha_onay, pattern=r"^captcha_"))
-    
-    # Bilgi ve Sistem Komutları
-    app_bot.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Kerem AI Hazir.")))
-    app_bot.add_handler(CommandHandler("temizle", temizle_command)) 
-    app_bot.add_handler(CommandHandler("sinavtarihi", sinavtarihi_command))
-    app_bot.add_handler(CommandHandler("kayit", kayit_command))
-    app_bot.add_handler(CommandHandler("iletisim", iletisim_command))
-    
-    # Medya ve Normal Metin İşleyiciler
-    app_bot.add_handler(MessageHandler(filters.Document.PDF, dosya_al))
-    app_bot.add_handler(MessageHandler(filters.VOICE, ses_al))
-    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
-    
-    print("🚀 Telegram bot polling başlatılıyor...", flush=True)
-    app_bot.run_polling(drop_pending_updates=True)
-
-# --- 5. UYGULAMAYI BAŞLATMA ---
-if __name__ == '__main__':
-    def start_flask():
-        try:
-            port = int(os.environ.get("PORT", 10000))
-            print(f"🌐 Web sunucusu {port} portunda başlatılıyor...", flush=True)
-            app.run(host="0.0.0.0", port=port, use_reloader=False, threaded=True)
-        except Exception as e:
-            print(f"❌ Web sunucusu hatası: {e}", flush=True)
-
-    web_thread = threading.Thread(target=start_flask, daemon=True)
-    web_thread.start()
-    
-    time.sleep(2)
-
-    try:    
-        run_telegram_bot()
-    except Exception as e:
-        print(f"❌ BOT CRITICAL ERROR: {e}", flush=True)
-
-# --- OTOMATİK MODERASYON VE CAPTCHA FONKSİYONLARI ---
 
 async def otomatik_moderasyon(update, context):
     """Link, Reklam ve Spam korumasını yapan ana kalkan"""
@@ -859,30 +697,76 @@ async def otomatik_moderasyon(update, context):
     kullanici_mesaj_zamanlari[user_id] = [t for t in kullanici_mesaj_zamanlari[user_id] if simdi - t < 7]
     kullanici_mesaj_zamanlari[user_id].append(simdi)
 
-    print(f"🔍 [FLOOD KONTROL] {kullanici_adi} son 7 saniyede {len(kullanici_mesaj_zamanlari[user_id])} mesaj atti.")
-
     if len(kullanici_mesaj_zamanlari[user_id]) >= 5:
-        # ÖNEMLİ: Önce uyarı mesajını gönderiyoruz ki sistemin çalıştığı kesinleşsin!
         uyari = await context.bot.send_message(
             chat_id=chat_id, 
             text=f"🛑 {kullanici_adi} spam limiti aşıldı! Otomatik kısıtlama uygulanıyor..."
         )
         gorevi_guvenli_baslat(context.bot, chat_id, uyari.message_id)
 
-        # Sonra susturmayı deniyoruz (Hesap adminse hata verecek ama yukarıdaki mesaj gitmiş olacak)
         try:
             await context.bot.restrict_chat_member(
                 chat_id=chat_id,
                 user_id=user_id,
                 permissions=ChatPermissions(can_send_messages=False)
             )
-            print(f"✅ {kullanici_adi} basariyla susturuldu.")
-        except Exception as e:
-            print(f"❌ Susturma yapilamadi (Kullanici muhtemelen admin): {e}")
-            uyari_admin = await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"ℹ️ {kullanici_adi} aslında spam yaptı ancak grupta yönetici haklarına sahip olduğu için susturulamadı."
-            )
-            gorevi_guvenli_baslat(context.bot, chat_id, uyari_admin.message_id)
+        except:
+            pass
             
         kullanici_mesaj_zamanlari[user_id] = []
+
+# --- GÜNCELLENMİŞ ÇALIŞTIRMA FONKSİYONU ---
+def run_telegram_bot():
+    # .env ile uğraşma, token'ını tırnak içine buraya yapıştır
+    token = "8736315853:AAHBp8IoQX4i8GsBFJ96jfZnQCUTFXIHdkQ"
+    
+    if not token or "BURAYA" in token:
+        print("❌ HATA: Telegram Token'ı kodun içinde tanımlanmamış!", flush=True)
+        return
+    
+    app_bot = Application.builder().token(token).build()
+    
+    # Moderasyon Komutları
+    app_bot.add_handler(CommandHandler("ban", ban_command))
+    app_bot.add_handler(CommandHandler("unban", unban_command))
+    app_bot.add_handler(CommandHandler("kick", kick_command))
+    app_bot.add_handler(CommandHandler("mute", mute_command))
+    app_bot.add_handler(CommandHandler("unmute", unmute_command))
+    
+    # Otomatik Kalkanlar
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, otomatik_moderasyon), group=-1)
+    
+    # Bilgi ve Sistem Komutları
+    app_bot.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Kerem AI Hazir.")))
+    app_bot.add_handler(CommandHandler("temizle", temizle_command)) 
+    app_bot.add_handler(CommandHandler("sinavtarihi", sinavtarihi_command))
+    app_bot.add_handler(CommandHandler("kayit", kayit_command))
+    app_bot.add_handler(CommandHandler("iletisim", iletisim_command))
+    
+    # Medya ve Normal Metin İşleyiciler
+    app_bot.add_handler(MessageHandler(filters.Document.PDF, dosya_al))
+    app_bot.add_handler(MessageHandler(filters.VOICE, ses_al))
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
+    
+    print("🚀 Telegram bot polling başlatılıyor...", flush=True)
+    app_bot.run_polling(drop_pending_updates=True)
+
+# --- 5. UYGULAMAYI BAŞLATMA ---
+if __name__ == '__main__':
+    def start_flask():
+        try:
+            port = int(os.environ.get("PORT", 10000))
+            print(f"🌐 Web sunucusu {port} portunda başlatılıyor...", flush=True)
+            app.run(host="0.0.0.0", port=port, use_reloader=False, threaded=True)
+        except Exception as e:
+            print(f"❌ Web sunucusu hatası: {e}", flush=True)
+
+    web_thread = threading.Thread(target=start_flask, daemon=True)
+    web_thread.start()
+    
+    time.sleep(2)
+
+    try:    
+        run_telegram_bot()
+    except Exception as e:
+        print(f"❌ BOT CRITICAL ERROR: {e}", flush=True)
