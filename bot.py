@@ -627,14 +627,43 @@ async def temizle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🧹 Yeni bir sayfa açtık! Bana yeni bir soru sorabilirsin.")
 
 async def sinavtarihi_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📅 Yaklaşan AÖF Sınav Tarihleri:\n(Buraya güncel tarihleri yazabilirsin)")
+    mesaj = (
+        "📅 <b>2026 YILI AÖF SINAV TAKVİMİ</b>\n\n"
+        "📘 <b>ANADOLU AÖF</b>\n"
+        "• Yaz Okulu Sınavı: 22 Ağustos 2026\n\n"
+        "📕 <b>ATA AÖF</b>\n"
+        "• Bütünleme Sınavı: 1 - 2 Ağustos 2026\n"
+        "• Yaz Okulu ve 3 Ders Sınavı: 13 Eylül 2026\n\n"
+        "📗 <b>AUZEF</b>\n"
+        "• Bütünleme Sınavı: 4 - 5 Temmuz 2026\n"
+        "• Mezuniyet İçin 3 Ders Sınavı: 5 Eylül 2026\n\n"
+        "📙 <b>ANKUZEF</b>\n"
+        "• Bütünleme Sınavı: 4 - 5 Temmuz 2026\n"
+        "• Mezuniyete 3 Ders Sınavı: 25 Temmuz 2026"
+    )
+    await update.message.reply_text(mesaj, parse_mode='HTML')
 
 async def kayit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📝 AÖF Kayıt Yenileme Dönemleri:\n(Buraya kayıt dönemlerini yazabilirsin)")
+    mesaj = (
+        "📝 <b>2026 YILI AÖF KAYIT VE EĞİTİM DÖNEMLERİ</b>\n\n"
+        "📘 <b>ANADOLU AÖF</b>\n"
+        "• Yaz Okulu Kayıtları: 29 Haziran - 3 Temmuz 2026\n"
+        "• Yaz Okulu Süreci: 29 Haziran - 22 Ağustos 2026 <i>(8 Hafta)</i>\n\n"
+        "📙 <b>ANKUZEF</b>\n"
+        "• Mezuniyete 3 Ders Sınavı Başvurusu: 20 Temmuz 2026\n\n"
+        "<i>💡 Not: Diğer üniversitelerin kayıt detayları açıklandığında listeye eklenecektir.</i>"
+    )
+    await update.message.reply_text(mesaj, parse_mode='HTML')
 
 async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📞 İletişim için grup yöneticilerine mesaj atabilirsiniz.")
+    mesaj = (
+        "📞 <b>İLETİŞİM VE DESTEK</b>\n\n"
+        "Grup kuralları, reklam işbirlikleri, şikayet veya önerileriniz için aktif grup yöneticilerimizden birine doğrudan özel mesaj gönderebilirsiniz.\n\n"
+        "🤖 <i>Ben Kerem AI, derslerinizle ilgili sorularınıza gruptan yanıt vermeye devam edeceğim. Başarılar dilerim!</i>"
+    )
+    await update.message.reply_text(mesaj, parse_mode='HTML')
 
+    
 # --- GLOBAL AYARLAR VE OTOMATİK MODERASYON KALKANI ---
 YASAKLI_KELIMELER = ["bahis", "kumar", "şans oyunu", "illegal"]
 kullanici_mesaj_zamanlari = {}
