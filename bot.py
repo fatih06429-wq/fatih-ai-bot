@@ -604,17 +604,50 @@ async def unmute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- STANDART KOMUTLAR ---
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE): 
+    if not update.message or not update.message.text:
+        return
+        
     mesaj = update.message.text.lower()
 
-    # Eğer mesajda sınavla ilgili kelimeler geçiyorsa direkt sınav tablosunu at
-    if any(kelime in mesaj for kelime in ["sınav tarihi", "sınavlar", "bütünleme", "vize", "final", "üç ders"]):
-        return await sinavtarihi_command(update, context)
+    # 1. YAZ OKULU
+    if "yaz okulu" in mesaj:
+        cevap = (
+            "☀️ <b>Yaz Okulu Tarihleri:</b>\n\n"
+            "• <b>Anadolu AÖF:</b> Yaz Okulu Başvuru 29 Haziran - 3 Temmuz 2026. Yaz Okulu sınav tarihi 22 Ağustos 2026.\n"
+            "• <b>Ata AÖF:</b> Yaz okulu sınav tarihi 13 Eylül 2026."
+        )
+        return await update.message.reply_text(cevap, parse_mode='HTML')
 
-    # Eğer mesajda kayıt veya yaz okulu geçiyorsa direkt kayıt tablosunu at
-    if any(kelime in mesaj for kelime in ["kayıt", "kayit", "yaz okulu", "kayıt yenileme"]):
-        return await kayit_command(update, context)
+    # 2. İKİNCİ ÜNİVERSİTE
+    elif "ikinci üniversite" in mesaj:
+        cevap = (
+            "🎓 <b>İkinci Üniversite Kayıtları:</b>\n\n"
+            "• <b>Anadolu AÖF:</b> 17 Ağustos - 19 Ekim 2026.\n"
+            "• <b>Ata AÖF:</b> 25 Ağustos - 03 Ekim 2025."
+        )
+        return await update.message.reply_text(cevap, parse_mode='HTML')
 
-    # Eğer bu kelimeler yoksa, normal yapay zeka gibi cevap ver
+    # 3. BÜTÜNLEME
+    elif "bütünleme" in mesaj:
+        cevap = (
+            "📝 <b>Bütünleme Sınavları:</b>\n\n"
+            "• <b>Ata AÖF:</b> 01 Ağustos - 02 Ağustos 2026.\n"
+            "• <b>AUZEF:</b> 04 - 05 Temmuz 2026.\n"
+            "• <b>ANKUZEF:</b> 04-05 Temmuz 2026."
+        )
+        return await update.message.reply_text(cevap, parse_mode='HTML')
+
+    # 4. ÜÇ DERS SINAVI
+    elif any(kelime in mesaj for kelime in ["üç ders", "3 ders", "mezuniyet"]):
+        cevap = (
+            "🎓 <b>Mezuniyet İçin Üç Ders Sınavı:</b>\n\n"
+            "• <b>Ata AÖF:</b> 13 Eylül 2026.\n"
+            "• <b>AUZEF:</b> 05 Eylül 2026.\n"
+            "• <b>ANKUZEF:</b> 20 Temmuz 2026."
+        )
+        return await update.message.reply_text(cevap, parse_mode='HTML')
+
+    # Yukarıdaki anahtar kelimeler yoksa, normal yapay zeka (Kerem) devreye girer
     reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
     await update.message.reply_text(reply)
 
