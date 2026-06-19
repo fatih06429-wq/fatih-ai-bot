@@ -5,13 +5,14 @@ import time
 import asyncio
 import re
 import datetime
+import requests
 import hashlib
 
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
 
-from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, MessageHandler, CommandHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram import Update, ChatPermissions
+from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 
 # --- ÇEVRE DEĞİŞKENLERİ (.env) ---
 from dotenv import load_dotenv
@@ -26,9 +27,19 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# 🛡️ SİBER GÜVENLİK AYARLARI 🛡️
-SUPER_ADMIN_ID = 7082795768  # LÜTFEN KENDİ TELEGRAM ID'Nİ BURAYA YAZ
+# ==========================================
+# 🛡️ SİBER GÜVENLİK VE AYAR KALKANLARI 🛡️
+# ==========================================
+SUPER_ADMIN_ID = 7082795768  # Sistem Kurucusu ID
+MAKSIMUM_DOSYA_BOYUTU = 5 * 1024 * 1024 # 5 MB (Hafıza patlatma koruması)
 TEHLIKELI_PROMPTLAR = ["unut", "ignore", "sistem", "system prompt", "kurallar", "şifre", "bypass", "jailbreak", "sen bir"]
+YASAKLI_KELIMELER = ["bahis", "kumar", "şans oyunu", "illegal"]
+
+# Global Değişkenler
+kullanici_mesaj_zamanlari = {}
+aktif_silme_gorevleri = set()
+aktif_gruplar = set() 
+grup_durumlari = {}   
 
 # --- 1. FIREBASE BASLATMA ---
 try:
@@ -41,6 +52,21 @@ try:
         print("✅ Firebase basariyla baslatildi.", flush=True)
 except Exception as e:
     print(f"❌ Firebase baslatma hatasi: {e}", flush=True)
+
+
+# 🚨 SESSİZ İSTİHBARAT SİSTEMİ (Kurucuya DM Atar)
+async def rapor_ver(context: ContextTypes.DEFAULT_TYPE, baslik: str, detay: str):
+    try:
+        mesaj = (
+            f"🚨 <b>SİBER GÜVENLİK UYARISI</b> 🚨\n\n"
+            f"🛡️ <b>Kalkan:</b> {baslik}\n"
+            f"👤 <b>Detay:</b> {detay}\n\n"
+            f"<i>Kerem AI duruma müdahale etti ve işlemi durdurdu.</i>"
+        )
+        await context.bot.send_message(chat_id=SUPER_ADMIN_ID, text=mesaj, parse_mode='HTML')
+    except Exception as e:
+        print(f"Rapor gönderilemedi: {e}")
+
 
 # --- 2. TAM TASARIMLI ARAYUZ (AUTH YOK) ---
 HTML_SAYFASI = """
@@ -532,20 +558,17 @@ def soru_cevapla():
     except: pass
     return jsonify({"cevap": cevap})
 
+
 # --- 4. TELEGRAM BOT FONKSIYONLARI ---
 
-# 🛡️ YÖNETİCİ KONTROL SİSTEMİ 🛡️
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    # Eger komutu kullanan kisi Super Admin (Kurucu) ise aninda onay ver!
     if update.effective_user.id == SUPER_ADMIN_ID:
         return True
-
     if update.effective_chat.type == 'private':
         return False
     chat_member = await context.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
     return chat_member.status in ['administrator', 'creator']
 
-# --- MODERASYON KOMUTLARI ---
 async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return await update.message.reply_text("⛔ Bu komutu sadece yöneticiler kullanabilir.")
@@ -553,8 +576,6 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Lütfen yasaklamak istediğiniz kişinin bir mesajını yanıtlayarak /ban yazın.")
     
     target_user = update.message.reply_to_message.from_user
-    
-    # 🛡️ Super Admin korumasi (Kurucu banlanamaz!)
     if target_user.id == SUPER_ADMIN_ID:
         return await update.message.reply_text("⛔ Güvenlik Kalkanı: Sistem kurucusu yasaklanamaz!")
 
@@ -562,38 +583,31 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.ban_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id)
         await update.message.reply_text(f"🔨 {target_user.first_name} Kerem AI tarafından gruptan kalıcı olarak yasaklandı.")
     except Exception:
-        await update.message.reply_text("Bu işlemi yapmaya yetkim yok. Lütfen bana 'Kullanıcıları Yasaklama' yetkisi verin.")
+        await update.message.reply_text("Bu işlemi yapmaya yetkim yok.")
 
 async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context): return
     if not update.message.reply_to_message: return await update.message.reply_text("Bir mesajı yanıtlayın.")
-    
     target_user = update.message.reply_to_message.from_user
     try:
         await context.bot.unban_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id, only_if_banned=True)
         await update.message.reply_text(f"✅ {target_user.first_name} adlı kişinin yasağı kaldırıldı.")
-    except Exception:
-        await update.message.reply_text("Bir hata oluştu veya yetkim yetersiz.")
+    except Exception: pass
 
 async def kick_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context): return
     if not update.message.reply_to_message: return await update.message.reply_text("Bir mesajı yanıtlayın.")
-    
     target_user = update.message.reply_to_message.from_user
     try:
         await context.bot.ban_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id)
         await context.bot.unban_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id)
         await update.message.reply_text(f"👢 {target_user.first_name} gruptan atıldı (tekrar katılabilir).")
-    except Exception:
-        await update.message.reply_text("Yetkim yetersiz.")
+    except Exception: pass
 
 async def mute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context): return
     if not update.message.reply_to_message: return await update.message.reply_text("Bir mesajı yanıtlayın.")
-    
     target_user = update.message.reply_to_message.from_user
-    
-    # 🛡️ Super Admin korumasi (Kurucu susturulamaz!)
     if target_user.id == SUPER_ADMIN_ID:
         return await update.message.reply_text("⛔ Güvenlik Kalkanı: Sistem kurucusu sessize alınamaz!")
 
@@ -601,13 +615,11 @@ async def mute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         permissions = ChatPermissions(can_send_messages=False)
         await context.bot.restrict_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id, permissions=permissions)
         await update.message.reply_text(f"🤐 {target_user.first_name} sessize alındı. Artık mesaj gönderemez.")
-    except Exception:
-        await update.message.reply_text("Yetkim yetersiz.")
+    except Exception: pass
 
 async def unmute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context): return
     if not update.message.reply_to_message: return await update.message.reply_text("Bir mesajı yanıtlayın.")
-    
     target_user = update.message.reply_to_message.from_user
     try:
         permissions = ChatPermissions(
@@ -618,59 +630,29 @@ async def unmute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await context.bot.restrict_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id, permissions=permissions)
         await update.message.reply_text(f"🔊 {target_user.first_name} artık konuşabilir.")
-    except Exception:
-        await update.message.reply_text("Yetkim yetersiz.")
+    except Exception: pass
 
-# --- STANDART KOMUTLAR VE AKILLI CHAT ---
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE): 
-    if not update.message or not update.message.text:
-        return
+    if not update.message or not update.message.text: return
         
     mesaj = update.message.text.lower()
 
-    # 1. YAZ OKULU
     if "yaz okulu" in mesaj:
-        cevap = (
-            "☀️ <b>Yaz Okulu Tarihleri:</b>\n\n"
-            "• <b>Anadolu AÖF:</b> Yaz Okulu Başvuru 29 Haziran - 3 Temmuz 2026. Yaz Okulu sınav tarihi 22 Ağustos 2026.\n"
-            "• <b>Ata AÖF:</b> Yaz okulu sınav tarihi 13 Eylül 2026."
-        )
+        cevap = "☀️ <b>Yaz Okulu Tarihleri:</b>\n\n• <b>Anadolu AÖF:</b> Yaz Okulu Başvuru 29 Haziran - 3 Temmuz 2026. Yaz Okulu sınav tarihi 22 Ağustos 2026.\n• <b>Ata AÖF:</b> Yaz okulu sınav tarihi 13 Eylül 2026."
         return await update.message.reply_text(cevap, parse_mode='HTML')
-
-    # 2. İKİNCİ ÜNİVERSİTE
     elif "ikinci üniversite" in mesaj:
-        cevap = (
-            "🎓 <b>İkinci Üniversite Kayıtları:</b>\n\n"
-            "• <b>Anadolu AÖF:</b> 17 Ağustos - 19 Ekim 2026.\n"
-            "• <b>Ata AÖF:</b> 25 Ağustos - 03 Ekim 2025."
-        )
+        cevap = "🎓 <b>İkinci Üniversite Kayıtları:</b>\n\n• <b>Anadolu AÖF:</b> 17 Ağustos - 19 Ekim 2026.\n• <b>Ata AÖF:</b> 25 Ağustos - 03 Ekim 2025."
         return await update.message.reply_text(cevap, parse_mode='HTML')
-
-    # 3. BÜTÜNLEME
     elif "bütünleme" in mesaj:
-        cevap = (
-            "📝 <b>Bütünleme Sınavları:</b>\n\n"
-            "• <b>Ata AÖF:</b> 01 Ağustos - 02 Ağustos 2026.\n"
-            "• <b>AUZEF:</b> 04 - 05 Temmuz 2026.\n"
-            "• <b>ANKUZEF:</b> 04-05 Temmuz 2026."
-        )
+        cevap = "📝 <b>Bütünleme Sınavları:</b>\n\n• <b>Ata AÖF:</b> 01 Ağustos - 02 Ağustos 2026.\n• <b>AUZEF:</b> 04 - 05 Temmuz 2026.\n• <b>ANKUZEF:</b> 04-05 Temmuz 2026."
         return await update.message.reply_text(cevap, parse_mode='HTML')
-
-    # 4. ÜÇ DERS SINAVI
     elif any(kelime in mesaj for kelime in ["üç ders", "3 ders", "mezuniyet"]):
-        cevap = (
-            "🎓 <b>Mezuniyet İçin Üç Ders Sınavı:</b>\n\n"
-            "• <b>Ata AÖF:</b> 13 Eylül 2026.\n"
-            "• <b>AUZEF:</b> 05 Eylül 2026.\n"
-            "• <b>ANKUZEF:</b> 20 Temmuz 2026."
-        )
+        cevap = "🎓 <b>Mezuniyet İçin Üç Ders Sınavı:</b>\n\n• <b>Ata AÖF:</b> 13 Eylül 2026.\n• <b>AUZEF:</b> 05 Eylül 2026.\n• <b>ANKUZEF:</b> 20 Temmuz 2026."
         return await update.message.reply_text(cevap, parse_mode='HTML')
 
-    # 🛡️ Prompt Injection Koruması
     if any(tehlike in mesaj for tehlike in TEHLIKELI_PROMPTLAR):
         return await update.message.reply_text("🛡️ Siber Güvenlik Kalkanı: Bu tür şüpheli komutları işlemem yasaktır.")
 
-    # Yukarıdaki anahtar kelimeler yoksa, normal yapay zeka (Kerem) devreye girer
     reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
     await update.message.reply_text(reply)
 
@@ -707,14 +689,12 @@ async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 2. GERÇEK VİRÜS TARAMASI (VirusTotal API)
         vt_api_key = os.environ.get("VIRUSTOTAL_API_KEY")
         if vt_api_key:
-            # Dosyanın dijital parmak izini (Hash) çıkarıyoruz
             sha256_hash = hashlib.sha256()
             with open(dosya_adi, "rb") as f:
                 for byte_block in iter(lambda: f.read(4096), b""):
                     sha256_hash.update(byte_block)
             dosya_hash = sha256_hash.hexdigest()
 
-            # VirusTotal'e soruyoruz
             url = f"https://www.virustotal.com/api/v3/files/{dosya_hash}"
             headers = {"x-apikey": vt_api_key}
             vt_response = requests.get(url, headers=headers)
@@ -724,27 +704,27 @@ async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 zararli_sayisi = sonuclar['data']['attributes']['last_analysis_stats']['malicious']
                 
                 if zararli_sayisi > 0:
-                    # 🚨 VİRÜS TESPİT EDİLDİ!
                     os.remove(dosya_adi) # Dosyayı hemen sil
                     await bekleme_mesaji.edit_text("🚨 <b>KRİTİK UYARI:</b> Yüklediğiniz dosyada zararlı yazılım tespit edildi. Dosya imha edildi!", parse_mode='HTML')
                     grup_adi = update.message.chat.title if update.message.chat.title else "Özel Sohbet"
                     await rapor_ver(context, "MALWARE TESPİTİ 🦠", f"{update.message.from_user.first_name}, {grup_adi} grubuna virüslü bir dosya ({update.message.document.file_name}) yükledi. Bot dosyayı sistemden sildi.")
-                    return # Yapay zekaya gitmeden işlemi kes
+                    return 
                     
         await bekleme_mesaji.edit_text("✅ Güvenlik taraması temiz. Yapay zeka dosyayı okuyor...")
         
         # 3. Temiz dosyayı Yapay zekaya (Groq) gönder
         reply = ask_ai("Bu belgeyi analiz et ve özetle.", f"tg_{user_id}", image_path=dosya_adi)
         
-        # Bekleme mesajını sil ve cevabı gönder
         await bekleme_mesaji.edit_text(reply)
         
     except Exception as e:
         await bekleme_mesaji.edit_text(f"⚠️ İşlem sırasında bir hata oluştu: {e}")
     finally:
-        # Sunucuda çöp bırakmamak için indirilen dosyayı sil
         if 'dosya_adi' in locals() and os.path.exists(dosya_adi):
             os.remove(dosya_adi)
+
+async def temizle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🧹 Yeni bir sayfa açtık! Bana yeni bir soru sorabilirsin.")
 
 async def sinavtarihi_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mesaj = (
@@ -783,198 +763,118 @@ async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(mesaj, parse_mode='HTML')
 
-
-# --- GLOBAL AYARLAR VE OTOMATİK MODERASYON KALKANI ---
-YASAKLI_KELIMELER = ["bahis", "kumar", "şans oyunu", "illegal"]
-kullanici_mesaj_zamanlari = {}
-
-aktif_silme_gorevleri = set()
-aktif_gruplar = set() # Botun bulunduğu grupları hatırlaması için
-grup_durumlari = {}   # Grupların o anki açık/kapalı durumu
-
 # 🌙 GECE BEKÇİSİ (Otomatik Kapat/Aç)
 async def gece_bekcisi(bot):
-    """Her dakika saati kontrol edip belirlenen saatler arası grubu kapatır"""
-    
-    # --- SAAT AYARLARINI BURADAN DEGISTIREBILIRSIN ---
-    KAPANIS_SAATI = 1  # Gece kacta kapanacak (Örn: 1)
-    ACILIS_SAATI = 8   # Sabah kacta acilacak (Örn: 8)
-    # -------------------------------------------------
-
+    KAPANIS_SAATI = 1  
+    ACILIS_SAATI = 8   
     while True:
         try:
-            # Render saatini Türkiye (UTC+3) saatine çeviriyoruz
             simdi = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
             saat = simdi.hour
-            
-            # Belirlenen saatler arası gece modudur
             gece_mi = KAPANIS_SAATI <= saat < ACILIS_SAATI
             
             for chat_id in list(aktif_gruplar):
                 durum = grup_durumlari.get(chat_id, None)
-                
-                # Bot yeniden başlarsa mevcut duruma sessizce adapte olur
                 if durum is None:
                     grup_durumlari[chat_id] = "KAPALI" if gece_mi else "ACIK"
-                    if gece_mi:
-                        await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
+                    if gece_mi: await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
                     continue
-                    
-                # Gece olduysa ve grup henüz kapatılmadıysa
                 if gece_mi and durum != "KAPALI":
                     await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
-                    await bot.send_message(
-                        chat_id, 
-                        f"🌙 <b>Saat 0{KAPANIS_SAATI}:00 oldu.</b>\n\nGrup sabah 0{ACILIS_SAATI}:00'a kadar mesaj gönderimine kapatılmıştır. Yöneticiler harici mesaj atılamaz. İyi geceler!", 
-                        parse_mode='HTML'
-                    )
+                    await bot.send_message(chat_id, f"🌙 <b>Saat 0{KAPANIS_SAATI}:00 oldu.</b>\n\nGrup sabah 0{ACILIS_SAATI}:00'a kadar mesaj gönderimine kapatılmıştır. Yöneticiler harici mesaj atılamaz.", parse_mode='HTML')
                     grup_durumlari[chat_id] = "KAPALI"
-                    
-                # Sabah olduysa ve grup kapalıysa
                 elif not gece_mi and durum == "KAPALI":
-                    permissions = ChatPermissions(
-                        can_send_messages=True, can_send_audios=True, can_send_documents=True,
-                        can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
-                        can_send_voice_notes=True, can_send_polls=True, can_send_other_messages=True,
-                        can_add_web_page_previews=True
-                    )
+                    permissions = ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True, can_send_videos=True, can_send_other_messages=True)
                     await bot.set_chat_permissions(chat_id, permissions)
-                    await bot.send_message(
-                        chat_id, 
-                        f"☀️ <b>Saat 0{ACILIS_SAATI}:00 oldu.</b>\n\nGrup mesaj gönderimine açılmıştır. Herkese günaydın!", 
-                        parse_mode='HTML'
-                    )
+                    await bot.send_message(chat_id, f"☀️ <b>Saat 0{ACILIS_SAATI}:00 oldu.</b>\n\nGrup mesaj gönderimine açılmıştır.", parse_mode='HTML')
                     grup_durumlari[chat_id] = "ACIK"
-                    
-        except Exception as e:
-            print(f"Gece bekcisi hatası: {e}")
-            
-        await asyncio.sleep(60) # Her 60 saniyede bir saati denetler
+        except Exception as e: pass
+        await asyncio.sleep(60)
 
-# Bot başlatılırken gece bekçisini arka plana atar
 async def post_init(application: Application):
     asyncio.create_task(gece_bekcisi(application.bot))
 
 async def gecikmeli_sil(bot, chat_id, message_id):
-    """10 saniye sessizce bekleyip mesajı dünyadan siler"""
     try:
         await asyncio.sleep(10)
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
-        print(f"✅ Uyari mesaji basariyla silindi: {message_id}")
-    except Exception as e:
-        print(f"⚠️ Mesaj silinirken bir sorun oldu (belki elle silindi): {e}")
+    except: pass
 
 def gorevi_guvenli_baslat(bot, chat_id, message_id):
-    """Görevi çöp toplayıcıya kaptırmadan güvenle tetikler"""
     gorev = asyncio.create_task(gecikmeli_sil(bot, chat_id, message_id))
     aktif_silme_gorevleri.add(gorev)
     gorev.add_done_callback(aktif_silme_gorevleri.discard)
 
 async def otomatik_moderasyon(update, context):
-    """Link, Reklam ve Spam korumasını yapan ana kalkan"""
-    if not update.message or not update.message.text:
-        return
-
+    if not update.message or not update.message.text: return
     chat_id = update.message.chat_id
-    user_id = update.message.from_user.id
-    
-    # Gece bekçisinin grubu hatırlaması için hafızaya alıyoruz
-    if update.message.chat and update.message.chat.type in ['group', 'supergroup']:
-        aktif_gruplar.add(chat_id)
+    if update.message.chat and update.message.chat.type in ['group', 'supergroup']: aktif_gruplar.add(chat_id)
 
+    user_id = update.message.from_user.id
     mesaj = update.message.text.lower()
     kullanici_adi = update.message.from_user.first_name
 
-    # 🛡️ Super Admin Korumasi: Kurucu spam veya yasakli kelimeden etkilenmez!
-    if user_id == SUPER_ADMIN_ID:
-        return
+    if user_id == SUPER_ADMIN_ID: return
 
-    # 1. YASAKLI KELİME KALKANI
     if any(kelime in mesaj for kelime in YASAKLI_KELIMELER):
-        try:
-            await update.message.delete()
-        except:
-            pass
-            
+        try: await update.message.delete()
+        except: pass
         uyari = await context.bot.send_message(chat_id=chat_id, text=f"⚠️ {kullanici_adi}, bu grupta yasaklı kelime kullanamazsın!")
         gorevi_guvenli_baslat(context.bot, chat_id, uyari.message_id)
+        grup_adi = update.message.chat.title
+        await rapor_ver(context, "Yasaklı Kelime", f"{kullanici_adi}, {grup_adi} grubunda yasaklı kelime kullandı.")
         return
 
-    # 2. LİNK ENGELLEYİCİ
     link_sablonu = r"(https?://|t\.me/|www\.)"
     if re.search(link_sablonu, mesaj):
-        try:
-            await update.message.delete()
-        except:
-            pass
-            
+        try: await update.message.delete()
+        except: pass
         uyari = await context.bot.send_message(chat_id=chat_id, text=f"🚫 {kullanici_adi}, grupta izinsiz link paylaşımı yasaktır!")
         gorevi_guvenli_baslat(context.bot, chat_id, uyari.message_id)
         return
 
-    # 3. FLOOD (SPAM) KORUMASI
     simdi = time.time()
-    if user_id not in kullanici_mesaj_zamanlari:
-        kullanici_mesaj_zamanlari[user_id] = []
-
+    if user_id not in kullanici_mesaj_zamanlari: kullanici_mesaj_zamanlari[user_id] = []
     kullanici_mesaj_zamanlari[user_id] = [t for t in kullanici_mesaj_zamanlari[user_id] if simdi - t < 7]
     kullanici_mesaj_zamanlari[user_id].append(simdi)
 
     if len(kullanici_mesaj_zamanlari[user_id]) >= 5:
-        uyari = await context.bot.send_message(
-            chat_id=chat_id, 
-            text=f"🛑 {kullanici_adi} spam limiti aşıldı! Otomatik kısıtlama uygulanıyor..."
-        )
+        uyari = await context.bot.send_message(chat_id=chat_id, text=f"🛑 {kullanici_adi} spam limiti aşıldı! Otomatik kısıtlama uygulanıyor...")
         gorevi_guvenli_baslat(context.bot, chat_id, uyari.message_id)
-
-        try:
-            await context.bot.restrict_chat_member(
-                chat_id=chat_id,
-                user_id=user_id,
-                permissions=ChatPermissions(can_send_messages=False)
-            )
-        except:
-            pass
-            
+        try: await context.bot.restrict_chat_member(chat_id=chat_id, user_id=user_id, permissions=ChatPermissions(can_send_messages=False))
+        except: pass
         kullanici_mesaj_zamanlari[user_id] = []
 
-# --- GÜNCELLENMİŞ ÇALIŞTIRMA FONKSİYONU ---
+
 def run_telegram_bot():
-    # .env ile uğraşma, token'ını tırnak içine buraya yapıştır
     token = "8736315853:AAHBp8IoQX4i8GsBFJ96jfZnQCUTFXIHdkQ"
-    
     if not token or "BURAYA" in token:
         print("❌ HATA: Telegram Token'ı kodun içinde tanımlanmamış!", flush=True)
         return
     
     app_bot = Application.builder().token(token).post_init(post_init).build()
     
-    # Moderasyon Komutları
     app_bot.add_handler(CommandHandler("ban", ban_command))
     app_bot.add_handler(CommandHandler("unban", unban_command))
     app_bot.add_handler(CommandHandler("kick", kick_command))
     app_bot.add_handler(CommandHandler("mute", mute_command))
     app_bot.add_handler(CommandHandler("unmute", unmute_command))
     
-    # Otomatik Kalkanlar
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, otomatik_moderasyon), group=-1)
     
-    # Bilgi ve Sistem Komutları
     app_bot.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("Kerem AI Hazir.")))
     app_bot.add_handler(CommandHandler("temizle", temizle_command)) 
     app_bot.add_handler(CommandHandler("sinavtarihi", sinavtarihi_command))
     app_bot.add_handler(CommandHandler("kayit", kayit_command))
     app_bot.add_handler(CommandHandler("iletisim", iletisim_command))
     
-    # Medya ve Normal Metin İşleyiciler
-    app_bot.add_handler(MessageHandler(filters.Document.PDF, dosya_al))
+    app_bot.add_handler(MessageHandler(filters.Document, dosya_al))
     app_bot.add_handler(MessageHandler(filters.VOICE, ses_al))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
     
     print("🚀 Telegram bot polling başlatılıyor...", flush=True)
     app_bot.run_polling(drop_pending_updates=True)
 
-# --- 5. UYGULAMAYI BAŞLATMA ---
 if __name__ == '__main__':
     def start_flask():
         try:
@@ -986,7 +886,6 @@ if __name__ == '__main__':
 
     web_thread = threading.Thread(target=start_flask, daemon=True)
     web_thread.start()
-    
     time.sleep(2)
 
     try:    
