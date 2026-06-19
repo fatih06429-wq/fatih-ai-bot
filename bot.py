@@ -25,6 +25,10 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# 🛡️ SİBER GÜVENLİK AYARLARI 🛡️
+SUPER_ADMIN_ID = 7082795768  # LÜTFEN KENDİ TELEGRAM ID'Nİ BURAYA YAZ
+TEHLIKELI_PROMPTLAR = ["unut", "ignore", "sistem", "system prompt", "kurallar", "şifre", "bypass", "jailbreak", "sen bir"]
+
 # --- 1. FIREBASE BASLATMA ---
 try:
     firebase_json_str = os.environ.get("FIREBASE_JSON")
@@ -529,8 +533,12 @@ def soru_cevapla():
 
 # --- 4. TELEGRAM BOT FONKSIYONLARI ---
 
-# YÖNETİCİ KONTROL SİSTEMİ
+# 🛡️ YÖNETİCİ KONTROL SİSTEMİ 🛡️
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    # Eger komutu kullanan kisi Super Admin (Kurucu) ise aninda onay ver!
+    if update.effective_user.id == SUPER_ADMIN_ID:
+        return True
+
     if update.effective_chat.type == 'private':
         return False
     chat_member = await context.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
@@ -544,6 +552,11 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Lütfen yasaklamak istediğiniz kişinin bir mesajını yanıtlayarak /ban yazın.")
     
     target_user = update.message.reply_to_message.from_user
+    
+    # 🛡️ Super Admin korumasi (Kurucu banlanamaz!)
+    if target_user.id == SUPER_ADMIN_ID:
+        return await update.message.reply_text("⛔ Güvenlik Kalkanı: Sistem kurucusu yasaklanamaz!")
+
     try:
         await context.bot.ban_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id)
         await update.message.reply_text(f"🔨 {target_user.first_name} Kerem AI tarafından gruptan kalıcı olarak yasaklandı.")
@@ -578,6 +591,11 @@ async def mute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.reply_to_message: return await update.message.reply_text("Bir mesajı yanıtlayın.")
     
     target_user = update.message.reply_to_message.from_user
+    
+    # 🛡️ Super Admin korumasi (Kurucu susturulamaz!)
+    if target_user.id == SUPER_ADMIN_ID:
+        return await update.message.reply_text("⛔ Güvenlik Kalkanı: Sistem kurucusu sessize alınamaz!")
+
     try:
         permissions = ChatPermissions(can_send_messages=False)
         await context.bot.restrict_chat_member(chat_id=update.effective_chat.id, user_id=target_user.id, permissions=permissions)
@@ -602,7 +620,7 @@ async def unmute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         await update.message.reply_text("Yetkim yetersiz.")
 
-# --- STANDART KOMUTLAR ---
+# --- STANDART KOMUTLAR VE AKILLI CHAT ---
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE): 
     if not update.message or not update.message.text:
         return
@@ -646,6 +664,10 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• <b>ANKUZEF:</b> 20 Temmuz 2026."
         )
         return await update.message.reply_text(cevap, parse_mode='HTML')
+
+    # 🛡️ Prompt Injection Koruması
+    if any(tehlike in mesaj for tehlike in TEHLIKELI_PROMPTLAR):
+        return await update.message.reply_text("🛡️ Siber Güvenlik Kalkanı: Bu tür şüpheli komutları işlemem yasaktır.")
 
     # Yukarıdaki anahtar kelimeler yoksa, normal yapay zeka (Kerem) devreye girer
     reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
@@ -801,14 +823,18 @@ async def otomatik_moderasyon(update, context):
         return
 
     chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
     
     # Gece bekçisinin grubu hatırlaması için hafızaya alıyoruz
     if update.message.chat and update.message.chat.type in ['group', 'supergroup']:
         aktif_gruplar.add(chat_id)
 
-    user_id = update.message.from_user.id
     mesaj = update.message.text.lower()
     kullanici_adi = update.message.from_user.first_name
+
+    # 🛡️ Super Admin Korumasi: Kurucu spam veya yasakli kelimeden etkilenmez!
+    if user_id == SUPER_ADMIN_ID:
+        return
 
     # 1. YASAKLI KELİME KALKANI
     if any(kelime in mesaj for kelime in YASAKLI_KELIMELER):
