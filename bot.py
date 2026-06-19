@@ -5,6 +5,7 @@ import time
 import asyncio
 import re
 import datetime
+import hashlib
 
 from flask import Flask, request, jsonify, render_template_string
 from werkzeug.utils import secure_filename
@@ -686,12 +687,64 @@ async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(dosya_adi): os.remove(dosya_adi)
 
 async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = f"tg_{update.message.from_user.id}"
-    await update.message.reply_text("📥 Dosya alindi, analiz ediliyor...")
-    await update.message.reply_text("Dosya analizi tamamlandı.")
+    user_id = update.message.from_user.id
+    
+    # 🛡️ Hafıza Bombası Koruması
+    if update.message.document.file_size > MAKSIMUM_DOSYA_BOYUTU and user_id != SUPER_ADMIN_ID:
+        await update.message.reply_text("🛑 Güvenlik Kalkanı: Dosya boyutu çok büyük (Max 5MB). İstek reddedildi.")
+        grup_adi = update.message.chat.title if update.message.chat.title else "Özel Sohbet"
+        await rapor_ver(context, "Hafıza Bombası (Büyük Dosya)", f"{update.message.from_user.first_name}, {grup_adi} konumunda 5MB'ı aşan bir dosya yüklemeye çalıştı.")
+        return
 
-async def temizle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🧹 Yeni bir sayfa açtık! Bana yeni bir soru sorabilirsin.")
+    bekleme_mesaji = await update.message.reply_text("🛡️ Dosya alındı. Karantinada güvenlik taramasından geçiriliyor...")
+    
+    try:
+        # 1. Dosyayı Telegram'dan indir
+        file = await context.bot.get_file(update.message.document.file_id)
+        dosya_adi = f"temp_{user_id}_{update.message.document.file_name}"
+        await file.download_to_drive(dosya_adi)
+        
+        # 2. GERÇEK VİRÜS TARAMASI (VirusTotal API)
+        vt_api_key = os.environ.get("VIRUSTOTAL_API_KEY")
+        if vt_api_key:
+            # Dosyanın dijital parmak izini (Hash) çıkarıyoruz
+            sha256_hash = hashlib.sha256()
+            with open(dosya_adi, "rb") as f:
+                for byte_block in iter(lambda: f.read(4096), b""):
+                    sha256_hash.update(byte_block)
+            dosya_hash = sha256_hash.hexdigest()
+
+            # VirusTotal'e soruyoruz
+            url = f"https://www.virustotal.com/api/v3/files/{dosya_hash}"
+            headers = {"x-apikey": vt_api_key}
+            vt_response = requests.get(url, headers=headers)
+
+            if vt_response.status_code == 200:
+                sonuclar = vt_response.json()
+                zararli_sayisi = sonuclar['data']['attributes']['last_analysis_stats']['malicious']
+                
+                if zararli_sayisi > 0:
+                    # 🚨 VİRÜS TESPİT EDİLDİ!
+                    os.remove(dosya_adi) # Dosyayı hemen sil
+                    await bekleme_mesaji.edit_text("🚨 <b>KRİTİK UYARI:</b> Yüklediğiniz dosyada zararlı yazılım tespit edildi. Dosya imha edildi!", parse_mode='HTML')
+                    grup_adi = update.message.chat.title if update.message.chat.title else "Özel Sohbet"
+                    await rapor_ver(context, "MALWARE TESPİTİ 🦠", f"{update.message.from_user.first_name}, {grup_adi} grubuna virüslü bir dosya ({update.message.document.file_name}) yükledi. Bot dosyayı sistemden sildi.")
+                    return # Yapay zekaya gitmeden işlemi kes
+                    
+        await bekleme_mesaji.edit_text("✅ Güvenlik taraması temiz. Yapay zeka dosyayı okuyor...")
+        
+        # 3. Temiz dosyayı Yapay zekaya (Groq) gönder
+        reply = ask_ai("Bu belgeyi analiz et ve özetle.", f"tg_{user_id}", image_path=dosya_adi)
+        
+        # Bekleme mesajını sil ve cevabı gönder
+        await bekleme_mesaji.edit_text(reply)
+        
+    except Exception as e:
+        await bekleme_mesaji.edit_text(f"⚠️ İşlem sırasında bir hata oluştu: {e}")
+    finally:
+        # Sunucuda çöp bırakmamak için indirilen dosyayı sil
+        if 'dosya_adi' in locals() and os.path.exists(dosya_adi):
+            os.remove(dosya_adi)
 
 async def sinavtarihi_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mesaj = (
