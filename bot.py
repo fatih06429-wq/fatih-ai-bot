@@ -54,7 +54,7 @@ except Exception as e:
     print(f"❌ Firebase baslatma hatasi: {e}", flush=True)
 
 
-# 🚨 SESSİZ İSTİHBARAT SİSTEMİ (Kurucuya DM Atar)
+# 🚨 SESSİZ İSTİHBARAT SİSTEMİ
 async def rapor_ver(context: ContextTypes.DEFAULT_TYPE, baslik: str, detay: str):
     try:
         mesaj = (
@@ -214,9 +214,7 @@ HTML_SAYFASI = """
         <div id="chat-container">
     <div id="welcome-screen" style="text-align:center; padding-top:50px;">
         <h1 style="font-size:38px; margin-bottom:10px; font-weight:600; background: linear-gradient(45deg, #a8c7fa, #ffb6c1); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Merhaba, bugun ne kesfedelim?</h1>
-        
         <div class="chips-container" id="dynamic-chips"></div>
-        
     </div>
 </div>
         
@@ -637,6 +635,7 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     mesaj = update.message.text.lower()
 
+    # Statik cevaplar
     if "yaz okulu" in mesaj:
         cevap = "☀️ <b>Yaz Okulu Tarihleri:</b>\n\n• <b>Anadolu AÖF:</b> Yaz Okulu Başvuru 29 Haziran - 3 Temmuz 2026. Yaz Okulu sınav tarihi 22 Ağustos 2026.\n• <b>Ata AÖF:</b> Yaz okulu sınav tarihi 13 Eylül 2026."
         return await update.message.reply_text(cevap, parse_mode='HTML')
@@ -653,8 +652,15 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if any(tehlike in mesaj for tehlike in TEHLIKELI_PROMPTLAR):
         return await update.message.reply_text("🛡️ Siber Güvenlik Kalkanı: Bu tür şüpheli komutları işlemem yasaktır.")
 
-    reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
-    await update.message.reply_text(reply)
+    # SESSİZ ÇÖKMEYİ ENGELLEYEN HATA YAKALAMA SİSTEMİ EKLENDİ
+    bekleme = await update.message.reply_text("🧠 Düşünüyorum...")
+    try:
+        reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
+        if not reply:
+            reply = "⚠️ Yapay zeka bana boş bir yanıt döndürdü."
+        await bekleme.edit_text(reply)
+    except Exception as e:
+        await bekleme.edit_text(f"⚠️ Yapay Zeka ile bağlantı koptu!\n\nHata: {str(e)}\n\n(Not: Lütfen Render paneline GROQ_API_KEY şifreni doğru girdiğinden emin ol.)")
 
 async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = f"tg_{update.message.from_user.id}"
@@ -664,14 +670,21 @@ async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file = await context.bot.get_file(update.message.voice.file_id)
         await file.download_to_drive(dosya_adi)
         reply = ask_ai("Bu sesli mesaja yanit ver.", user_id, image_path=dosya_adi)
+        if not reply: reply = "⚠️ Ses anlaşılamadı veya boş yanıt geldi."
         await bekleme.edit_text(reply)
+    except Exception as e:
+        await bekleme.edit_text(f"⚠️ Hata oluştu: {str(e)}")
     finally:
         if os.path.exists(dosya_adi): os.remove(dosya_adi)
 
 async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     
-    # 🛡️ Hafıza Bombası Koruması
+    # TELEGRAM'IN KIRILAMAZ FİZİKSEL SINIRI (20 MB) EKLENDİ
+    if update.message.document.file_size > 20 * 1024 * 1024:
+        return await update.message.reply_text("🛑 Telegram Kalkanı: Telegram botları güvenlik ve altyapı gereği 20 MB'tan büyük dosyaları indiremez. Lütfen dosyayı küçültüp tekrar gönderin.")
+
+    # Hafıza Bombası Koruması
     if update.message.document.file_size > MAKSIMUM_DOSYA_BOYUTU and user_id != SUPER_ADMIN_ID:
         await update.message.reply_text("🛑 Güvenlik Kalkanı: Dosya boyutu çok büyük (Max 5MB). İstek reddedildi.")
         grup_adi = update.message.chat.title if update.message.chat.title else "Özel Sohbet"
@@ -714,7 +727,7 @@ async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # 3. Temiz dosyayı Yapay zekaya (Groq) gönder
         reply = ask_ai("Bu belgeyi analiz et ve özetle.", f"tg_{user_id}", image_path=dosya_adi)
-        
+        if not reply: reply = "⚠️ Dosya başarıyla okundu ancak yapay zeka boş bir yanıt üretti."
         await bekleme_mesaji.edit_text(reply)
         
     except Exception as e:
@@ -868,7 +881,8 @@ def run_telegram_bot():
     app_bot.add_handler(CommandHandler("kayit", kayit_command))
     app_bot.add_handler(CommandHandler("iletisim", iletisim_command))
     
-    app_bot.add_handler(MessageHandler(filters.Document, dosya_al))
+    # FİLTRELEME HATASI BURADA DÜZELTİLDİ (filters.Document.ALL yapıldı)
+    app_bot.add_handler(MessageHandler(filters.Document.ALL, dosya_al))
     app_bot.add_handler(MessageHandler(filters.VOICE, ses_al))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
     
