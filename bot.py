@@ -744,7 +744,7 @@ async def gece_bekcisi(bot):
     """Her dakika saati kontrol edip belirlenen saatler arası grubu kapatır"""
     
     # --- SAAT AYARLARINI BURADAN DEGISTIREBILIRSIN ---
-    KAPANIS_SAATI = 2  # Gece kacta kapanacak (Örn: 2)
+    KAPANIS_SAATI = 1  # Gece kacta kapanacak (Örn: 1)
     ACILIS_SAATI = 8   # Sabah kacta acilacak (Örn: 8)
     # -------------------------------------------------
 
