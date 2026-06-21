@@ -173,14 +173,30 @@ async def yeni_uye_karsilama(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await context.bot.restrict_chat_member(
                 update.message.chat_id, uye.id, ChatPermissions(can_send_messages=False)
             )
-            # Doğrulama Butonu Gönder
-            keyboard = [[InlineKeyboardButton("🎓 Ben AÖF Öğrencisiyim (Doğrula)", callback_data=f"captcha_{uye.id}")]]
+            
+            # 🛡️ GÜNCEL BUTON VE MESAJ
+            keyboard = [[InlineKeyboardButton("✅ Ben bot değilim", callback_data=f"captcha_{uye.id}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            await update.message.reply_text(
-                f"Hoş geldin {uye.first_name}! 🛡️\nBot baskınlarına karşı robot olmadığını doğrulamak için aşağıdaki butona tıkla. Aksi takdirde mesaj yazamazsın.",
+            uyari_mesaji = await update.message.reply_text(
+                f"Hoş geldin {uye.first_name}! 🛡️\nSohbete dahil olmak için lütfen aşağıdaki butona tıkla:",
                 reply_markup=reply_markup
             )
+            
+            # ⏱️ 60 Saniye kuralı: Basmazsa hem mesajı sil hem gruptan at
+            async def kural_ihlali():
+                await asyncio.sleep(60)
+                try:
+                    # Kullanıcı hala gruptaysa ve kısıtlaması kalkmadıysa at
+                    member = await context.bot.get_chat_member(update.message.chat_id, uye.id)
+                    if not member.status in ['left', 'kicked']:
+                        await context.bot.ban_chat_member(update.message.chat_id, uye.id)
+                        await context.bot.unban_chat_member(update.message.chat_id, uye.id) # Gruptan tamamen at
+                        await uyari_mesaji.delete()
+                except Exception: pass
+                
+            asyncio.create_task(kural_ihlali())
+            
         except Exception: pass
 
 async def captcha_dogrulama(update: Update, context: ContextTypes.DEFAULT_TYPE):
