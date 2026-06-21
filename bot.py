@@ -14,6 +14,7 @@ from werkzeug.utils import secure_filename
 
 from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, MessageHandler, CommandHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ChatJoinRequestHandler
 
 # --- ÇEVRE DEĞİŞKENLERİ (.env) ---
 from dotenv import load_dotenv
