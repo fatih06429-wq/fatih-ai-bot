@@ -180,46 +180,49 @@ async def manuel_ac(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Hata: {e}")
 
 # 🟡 MODÜL 2: ANTI-RAID VE CAPTCHA
+# Bu fonksiyonu, hem 'new_chat_members' hem de 'ChatJoinRequest' ile çalışacak şekilde güncelledik.
 async def yeni_uye_karsilama(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    for uye in update.message.new_chat_members:
-        if uye.is_bot: continue
+    # EĞER İSTEK ÜZERİNE GELDİYSE (Kullanıcı henüz grupta değil, sen onaylayacaksın)
+    if update.chat_join_request:
+        istek = update.chat_join_request
+        # Önce sen manuel onaylamadan bot burayı çalıştırmasın, o yüzden önce onayla
+        await context.bot.approve_chat_join_request(chat_id=istek.chat.id, user_id=istek.from_user.id)
+        uye = istek.from_user
+        chat_id = istek.chat.id
+    # EĞER NORMAL GİRİŞ YAPTILARSA (Senin mevcut kodun)
+    elif update.message and update.message.new_chat_members:
+        uye = update.message.new_chat_members[0]
+        chat_id = update.message.chat_id
+        if uye.is_bot: return
+    else:
+        return
+
+    # Kısıtlama ve Buton İşlemleri (Ortak Alan)
+    try:
+        await context.bot.restrict_chat_member(
+            chat_id, uye.id, ChatPermissions(can_send_messages=False)
+        )
+        keyboard = [[InlineKeyboardButton("✅ Ben bot değilim", callback_data=f"captcha_{uye.id}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Eğer kara listedeyse anında şutla
-        if uye.id in kara_liste:
-            try: await context.bot.ban_chat_member(chat_id=update.message.chat_id, user_id=uye.id)
-            except: pass
-            continue
-            
-        try:
-            # Kullanıcıyı sustur
-            await context.bot.restrict_chat_member(
-                update.message.chat_id, uye.id, ChatPermissions(can_send_messages=False)
-            )
-            
-            # 🛡️ GÜNCEL BUTON VE MESAJ
-            keyboard = [[InlineKeyboardButton("✅ Ben bot değilim", callback_data=f"captcha_{uye.id}")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            uyari_mesaji = await update.message.reply_text(
-                f"Hoş geldin {uye.first_name}! 🛡️\nSohbete dahil olmak için lütfen aşağıdaki butona tıkla:",
-                reply_markup=reply_markup
-            )
-            
-            # ⏱️ 60 Saniye kuralı: Basmazsa hem mesajı sil hem gruptan at
-            async def kural_ihlali():
-                await asyncio.sleep(60)
-                try:
-                    # Kullanıcı hala gruptaysa ve kısıtlaması kalkmadıysa at
-                    member = await context.bot.get_chat_member(update.message.chat_id, uye.id)
-                    if not member.status in ['left', 'kicked']:
-                        await context.bot.ban_chat_member(update.message.chat_id, uye.id)
-                        await context.bot.unban_chat_member(update.message.chat_id, uye.id) # Gruptan tamamen at
-                        await uyari_mesaji.delete()
-                except Exception: pass
-                
-            asyncio.create_task(kural_ihlali())
-            
-        except Exception: pass
+        uyari_mesaji = await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"Hoş geldin {uye.first_name}! 🛡️\nSohbete dahil olmak için lütfen aşağıdaki butona tıkla:",
+            reply_markup=reply_markup
+        )
+        
+        # 60 Saniye Kuralı (Aynı kalıyor)
+        async def kural_ihlali():
+            await asyncio.sleep(60)
+            try:
+                member = await context.bot.get_chat_member(chat_id, uye.id)
+                if not member.status in ['left', 'kicked', 'restricted']: # Basit bir kontrol
+                    await context.bot.ban_chat_member(chat_id, uye.id)
+                    await context.bot.unban_chat_member(chat_id, uye.id)
+            except Exception: pass
+        asyncio.create_task(kural_ihlali())
+    except Exception as e:
+        print(f"Hata: {e}")
 
 async def captcha_dogrulama(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -422,6 +425,9 @@ def run_telegram_bot():
     
     app_bot.add_handler(CommandHandler("ban", ban_command))
     app_bot.add_handler(CommandHandler("ac", manuel_ac))
+    # Mevcut komutların (ban ve ac) altına şunları ekle:
+    app_bot.add_handler(ChatJoinRequestHandler(yeni_uye_karsilama))
+    app_bot.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, yeni_uye_karsilama))
     
     # Yeni Üye Karşılama ve CAPTCHA 
     app_bot.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, yeni_uye_karsilama))
