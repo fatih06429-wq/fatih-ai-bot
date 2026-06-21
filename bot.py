@@ -157,6 +157,28 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await rapor_ver(context, "GLOBAL BAN", f"Yönetici, {target_user.first_name} adlı kişiyi global olarak ağdan engelledi.")
     except Exception: pass
 
+    async def manuel_ac(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Sadece yöneticiler kullanabilsin
+    if not await is_admin(update, context):
+        return await update.message.reply_text("⛔ Bu komutu sadece yöneticiler kullanabilir.")
+
+    # Yanıtlanan mesajı kontrol et
+    if not update.message.reply_to_message:
+        return await update.message.reply_text("Lütfen engelini kaldırmak istediğiniz kişinin bir mesajına yanıt vererek bu komutu kullanın.")
+
+    uye = update.message.reply_to_message.from_user
+    
+    try:
+        # Kısıtlamaları kaldır
+        permissions = ChatPermissions(
+            can_send_messages=True, can_send_audios=True, can_send_documents=True, 
+            can_send_photos=True, can_send_videos=True, can_send_other_messages=True
+        )
+        await context.bot.restrict_chat_member(update.message.chat_id, uye.id, permissions)
+        await update.message.reply_text(f"✅ {uye.first_name} üzerindeki kısıtlamalar manuel olarak kaldırıldı.")
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Hata: {e}")
+
 # 🟡 MODÜL 2: ANTI-RAID VE CAPTCHA
 async def yeni_uye_karsilama(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for uye in update.message.new_chat_members:
@@ -399,6 +421,7 @@ def run_telegram_bot():
     app_bot = Application.builder().token(token).post_init(post_init).build()
     
     app_bot.add_handler(CommandHandler("ban", ban_command))
+    app_bot.add_handler(CommandHandler("ac", manuel_ac))
     
     # Yeni Üye Karşılama ve CAPTCHA 
     app_bot.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, yeni_uye_karsilama))
