@@ -795,22 +795,36 @@ async def gece_bekcisi(bot):
             gece_mi = KAPANIS_SAATI <= saat < ACILIS_SAATI
             
             for chat_id in list(aktif_gruplar):
-                durum = grup_durumlari.get(chat_id, None)
-                if durum is None:
-                    grup_durumlari[chat_id] = "KAPALI" if gece_mi else "ACIK"
-                    if gece_mi: await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
-                    continue
-                if gece_mi and durum != "KAPALI":
-                    await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
-                    await bot.send_message(chat_id, f"🌙 <b>Saat 0{KAPANIS_SAATI}:00 oldu.</b>\n\nGrup sabah 0{ACILIS_SAATI}:00'a kadar mesaj gönderimine kapatılmıştır. Yöneticiler harici mesaj atılamaz. Herkese İyi Geceler!", parse_mode='HTML')
-                    grup_durumlari[chat_id] = "KAPALI"
-                elif not gece_mi and durum == "KAPALI":
-                    permissions = ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True, can_send_videos=True, can_send_other_messages=True)
-                    await bot.set_chat_permissions(chat_id, permissions)
-                    await bot.send_message(chat_id, f"☀️ <b>Saat 0{ACILIS_SAATI}:00 oldu.</b>\n\nGrup mesaj gönderimine açılmıştır. Günaydın!", parse_mode='HTML')
-                    grup_durumlari[chat_id] = "ACIK"
-        except Exception as e: pass
-        await asyncio.sleep(15) # Sapmaları önlemek için 15 saniyeye düşürüldü
+                # GÜVENLİK: Her grup kendi içinde izole olarak çalıştırılır.
+                # Biri hata verirse diğerleri etkilenmez!
+                try:
+                    durum = grup_durumlari.get(chat_id, None)
+                    if durum is None:
+                        grup_durumlari[chat_id] = "KAPALI" if gece_mi else "ACIK"
+                        if gece_mi: await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
+                        continue
+                    
+                    if gece_mi and durum != "KAPALI":
+                        await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
+                        await bot.send_message(chat_id, f"🌙 <b>Saat 0{KAPANIS_SAATI}:00 oldu.</b>\n\nGrup sabah 0{ACILIS_SAATI}:00'a kadar mesaj gönderimine kapatılmıştır. Yöneticiler harici mesaj atılamaz. Herkese İyi Geceler!", parse_mode='HTML')
+                        grup_durumlari[chat_id] = "KAPALI"
+                        
+                    elif not gece_mi and durum == "KAPALI":
+                        permissions = ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True, can_send_videos=True, can_send_other_messages=True)
+                        await bot.set_chat_permissions(chat_id, permissions)
+                        await bot.send_message(chat_id, f"☀️ <b>Saat 0{ACILIS_SAATI}:00 oldu.</b>\n\nGrup mesaj gönderimine açılmıştır. Günaydın!", parse_mode='HTML')
+                        grup_durumlari[chat_id] = "ACIK"
+                        
+                except Exception as e:
+                    # Hata veren grubu tespit etmek için logluyoruz ama sistemi durdurmuyoruz.
+                    print(f"⚠️ Gece Bekçisi Hatası | Grup ID: {chat_id} | Hata: {e}", flush=True)
+                    pass 
+                    
+        except Exception as e: 
+            print(f"Gece Bekçisi Ana Döngü Hatası: {e}", flush=True)
+            pass
+            
+        await asyncio.sleep(15)
 
 async def post_init(application: Application):
     asyncio.create_task(gece_bekcisi(application.bot))
