@@ -157,7 +157,7 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await rapor_ver(context, "GLOBAL BAN", f"Yönetici, {target_user.first_name} adlı kişiyi global olarak ağdan engelledi.")
     except Exception: pass
 
-    async def manuel_ac(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def manuel_ac(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Sadece yöneticiler kullanabilsin
     if not await is_admin(update, context):
         return await update.message.reply_text("⛔ Bu komutu sadece yöneticiler kullanabilir.")
