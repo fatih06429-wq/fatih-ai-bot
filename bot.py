@@ -31,14 +31,12 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # 🛡️ SİBER GÜVENLİK VE AYAR KALKANLARI 🛡️
 # ==========================================
 SUPER_ADMIN_ID = 7082795768  # Sistem Kurucusu ID
-MAKSIMUM_DOSYA_BOYUTU = 5 * 1024 * 1024 # 5 MB (Hafıza patlatma koruması)
+MAKSIMUM_DOSYA_BOYUTU = 5 * 1024 * 1024 # 5 MB 
 TEHLIKELI_PROMPTLAR = ["unut", "ignore", "sistem", "system prompt", "kurallar", "şifre", "bypass", "jailbreak", "sen bir"]
 YASAKLI_KELIMELER = ["bahis", "kumar", "şans oyunu", "illegal"]
 
-# Global Değişkenler
 kullanici_mesaj_zamanlari = {}
 aktif_silme_gorevleri = set()
-aktif_gruplar = set() 
 grup_durumlari = {}   
 
 # --- 1. FIREBASE BASLATMA ---
@@ -53,6 +51,23 @@ try:
 except Exception as e:
     print(f"❌ Firebase baslatma hatasi: {e}", flush=True)
 
+# 🧠 FIREBASE KALICI GRUP HAFIZASI (Bot Asla Unutmaz)
+def gruplari_yukle():
+    try:
+        doc = firestore.client().collection("bot_ayarlar").document("aktif_gruplar").get()
+        if doc.exists:
+            return set(doc.to_dict().get("liste", []))
+    except: pass
+    return set()
+
+def grubu_kaydet(chat_id):
+    try:
+        firestore.client().collection("bot_ayarlar").document("aktif_gruplar").set({
+            "liste": firestore.ArrayUnion([chat_id])
+        }, merge=True)
+    except: pass
+
+aktif_gruplar = gruplari_yukle() # Bot başlarken veritabanından hatırlar
 
 # 🚨 SESSİZ İSTİHBARAT SİSTEMİ
 async def rapor_ver(context: ContextTypes.DEFAULT_TYPE, baslik: str, detay: str):
@@ -65,7 +80,7 @@ async def rapor_ver(context: ContextTypes.DEFAULT_TYPE, baslik: str, detay: str)
         )
         await context.bot.send_message(chat_id=SUPER_ADMIN_ID, text=mesaj, parse_mode='HTML')
     except Exception as e:
-        print(f"Rapor gönderilemedi: {e}")
+        pass
 
 
 # --- 2. TAM TASARIMLI ARAYUZ (AUTH YOK) ---
@@ -635,7 +650,6 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     mesaj = update.message.text.lower()
 
-    # Statik cevaplar
     if "yaz okulu" in mesaj:
         cevap = "☀️ <b>Yaz Okulu Tarihleri:</b>\n\n• <b>Anadolu AÖF:</b> Yaz Okulu Başvuru 29 Haziran - 3 Temmuz 2026. Yaz Okulu sınav tarihi 22 Ağustos 2026.\n• <b>Ata AÖF:</b> Yaz okulu sınav tarihi 13 Eylül 2026."
         return await update.message.reply_text(cevap, parse_mode='HTML')
@@ -652,7 +666,6 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if any(tehlike in mesaj for tehlike in TEHLIKELI_PROMPTLAR):
         return await update.message.reply_text("🛡️ Siber Güvenlik Kalkanı: Bu tür şüpheli komutları işlemem yasaktır.")
 
-    # SESSİZ ÇÖKMEYİ ENGELLEYEN HATA YAKALAMA SİSTEMİ EKLENDİ
     bekleme = await update.message.reply_text("🧠 Düşünüyorum...")
     try:
         reply = ask_ai(update.message.text, f"tg_{update.message.from_user.id}")
@@ -660,7 +673,7 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply = "⚠️ Yapay zeka bana boş bir yanıt döndürdü."
         await bekleme.edit_text(reply)
     except Exception as e:
-        await bekleme.edit_text(f"⚠️ Yapay Zeka ile bağlantı koptu!\n\nHata: {str(e)}\n\n(Not: Lütfen Render paneline GROQ_API_KEY şifreni doğru girdiğinden emin ol.)")
+        await bekleme.edit_text(f"⚠️ Yapay Zeka ile bağlantı koptu!\n\nHata: {str(e)}")
 
 async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = f"tg_{update.message.from_user.id}"
@@ -680,11 +693,9 @@ async def ses_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     
-    # TELEGRAM'IN KIRILAMAZ FİZİKSEL SINIRI (20 MB) EKLENDİ
     if update.message.document.file_size > 20 * 1024 * 1024:
         return await update.message.reply_text("🛑 Telegram Kalkanı: Telegram botları güvenlik ve altyapı gereği 20 MB'tan büyük dosyaları indiremez. Lütfen dosyayı küçültüp tekrar gönderin.")
 
-    # Hafıza Bombası Koruması
     if update.message.document.file_size > MAKSIMUM_DOSYA_BOYUTU and user_id != SUPER_ADMIN_ID:
         await update.message.reply_text("🛑 Güvenlik Kalkanı: Dosya boyutu çok büyük (Max 5MB). İstek reddedildi.")
         grup_adi = update.message.chat.title if update.message.chat.title else "Özel Sohbet"
@@ -694,12 +705,10 @@ async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bekleme_mesaji = await update.message.reply_text("🛡️ Dosya alındı. Karantinada güvenlik taramasından geçiriliyor...")
     
     try:
-        # 1. Dosyayı Telegram'dan indir
         file = await context.bot.get_file(update.message.document.file_id)
         dosya_adi = f"temp_{user_id}_{update.message.document.file_name}"
         await file.download_to_drive(dosya_adi)
         
-        # 2. GERÇEK VİRÜS TARAMASI (VirusTotal API)
         vt_api_key = os.environ.get("VIRUSTOTAL_API_KEY")
         if vt_api_key:
             sha256_hash = hashlib.sha256()
@@ -717,7 +726,7 @@ async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 zararli_sayisi = sonuclar['data']['attributes']['last_analysis_stats']['malicious']
                 
                 if zararli_sayisi > 0:
-                    os.remove(dosya_adi) # Dosyayı hemen sil
+                    os.remove(dosya_adi) 
                     await bekleme_mesaji.edit_text("🚨 <b>KRİTİK UYARI:</b> Yüklediğiniz dosyada zararlı yazılım tespit edildi. Dosya imha edildi!", parse_mode='HTML')
                     grup_adi = update.message.chat.title if update.message.chat.title else "Özel Sohbet"
                     await rapor_ver(context, "MALWARE TESPİTİ 🦠", f"{update.message.from_user.first_name}, {grup_adi} grubuna virüslü bir dosya ({update.message.document.file_name}) yükledi. Bot dosyayı sistemden sildi.")
@@ -725,7 +734,6 @@ async def dosya_al(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
         await bekleme_mesaji.edit_text("✅ Güvenlik taraması temiz. Yapay zeka dosyayı okuyor...")
         
-        # 3. Temiz dosyayı Yapay zekaya (Groq) gönder
         reply = ask_ai("Bu belgeyi analiz et ve özetle.", f"tg_{user_id}", image_path=dosya_adi)
         if not reply: reply = "⚠️ Dosya başarıyla okundu ancak yapay zeka boş bir yanıt üretti."
         await bekleme_mesaji.edit_text(reply)
@@ -776,7 +784,7 @@ async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(mesaj, parse_mode='HTML')
 
-# 🌙 GECE BEKÇİSİ (Otomatik Kapat/Aç)
+# ⏱️ HIZLANDIRILMIŞ GECE BEKÇİSİ
 async def gece_bekcisi(bot):
     KAPANIS_SAATI = 1  
     ACILIS_SAATI = 8   
@@ -794,17 +802,15 @@ async def gece_bekcisi(bot):
                     continue
                 if gece_mi and durum != "KAPALI":
                     await bot.set_chat_permissions(chat_id, ChatPermissions(can_send_messages=False))
-                    # GECE MESAJI GÜNCELLENDİ
                     await bot.send_message(chat_id, f"🌙 <b>Saat 0{KAPANIS_SAATI}:00 oldu.</b>\n\nGrup sabah 0{ACILIS_SAATI}:00'a kadar mesaj gönderimine kapatılmıştır. Yöneticiler harici mesaj atılamaz. Herkese İyi Geceler!", parse_mode='HTML')
                     grup_durumlari[chat_id] = "KAPALI"
                 elif not gece_mi and durum == "KAPALI":
                     permissions = ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True, can_send_videos=True, can_send_other_messages=True)
                     await bot.set_chat_permissions(chat_id, permissions)
-                    # SABAH MESAJI GÜNCELLENDİ
                     await bot.send_message(chat_id, f"☀️ <b>Saat 0{ACILIS_SAATI}:00 oldu.</b>\n\nGrup mesaj gönderimine açılmıştır. Günaydın!", parse_mode='HTML')
                     grup_durumlari[chat_id] = "ACIK"
         except Exception as e: pass
-        await asyncio.sleep(60)
+        await asyncio.sleep(15) # Sapmaları önlemek için 15 saniyeye düşürüldü
 
 async def post_init(application: Application):
     asyncio.create_task(gece_bekcisi(application.bot))
@@ -823,7 +829,12 @@ def gorevi_guvenli_baslat(bot, chat_id, message_id):
 async def otomatik_moderasyon(update, context):
     if not update.message or not update.message.text: return
     chat_id = update.message.chat_id
-    if update.message.chat and update.message.chat.type in ['group', 'supergroup']: aktif_gruplar.add(chat_id)
+    
+    # 🧠 YENİ GRUP HAFIZA KAYDI SİSTEMİ
+    if update.message.chat and update.message.chat.type in ['group', 'supergroup']:
+        if chat_id not in aktif_gruplar:
+            aktif_gruplar.add(chat_id)
+            grubu_kaydet(chat_id) # Yeni bir grupta konuşulursa anında veritabanına yazar!
 
     user_id = update.message.from_user.id
     mesaj = update.message.text.lower()
@@ -860,7 +871,6 @@ async def otomatik_moderasyon(update, context):
         except: pass
         kullanici_mesaj_zamanlari[user_id] = []
 
-
 def run_telegram_bot():
     token = "8736315853:AAHBp8IoQX4i8GsBFJ96jfZnQCUTFXIHdkQ"
     if not token or "BURAYA" in token:
@@ -883,7 +893,6 @@ def run_telegram_bot():
     app_bot.add_handler(CommandHandler("kayit", kayit_command))
     app_bot.add_handler(CommandHandler("iletisim", iletisim_command))
     
-    # FİLTRELEME HATASI BURADA DÜZELTİLDİ (filters.Document.ALL yapıldı)
     app_bot.add_handler(MessageHandler(filters.Document.ALL, dosya_al))
     app_bot.add_handler(MessageHandler(filters.VOICE, ses_al))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
