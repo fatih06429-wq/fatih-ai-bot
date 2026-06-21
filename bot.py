@@ -786,7 +786,7 @@ async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ⏱️ HIZLANDIRILMIŞ GECE BEKÇİSİ
 async def gece_bekcisi(bot):
-    KAPANIS_SAATI = 1  
+    KAPANIS_SAATI = 2  # Bugünlük saat 2'ye çekildi
     ACILIS_SAATI = 8   
     while True:
         try:
@@ -795,8 +795,6 @@ async def gece_bekcisi(bot):
             gece_mi = KAPANIS_SAATI <= saat < ACILIS_SAATI
             
             for chat_id in list(aktif_gruplar):
-                # GÜVENLİK: Her grup kendi içinde izole olarak çalıştırılır.
-                # Biri hata verirse diğerleri etkilenmez!
                 try:
                     durum = grup_durumlari.get(chat_id, None)
                     if durum is None:
@@ -816,7 +814,6 @@ async def gece_bekcisi(bot):
                         grup_durumlari[chat_id] = "ACIK"
                         
                 except Exception as e:
-                    # Hata veren grubu tespit etmek için logluyoruz ama sistemi durdurmuyoruz.
                     print(f"⚠️ Gece Bekçisi Hatası | Grup ID: {chat_id} | Hata: {e}", flush=True)
                     pass 
                     
