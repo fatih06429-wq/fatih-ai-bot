@@ -838,14 +838,14 @@ def gorevi_guvenli_baslat(bot, chat_id, message_id):
     gorev.add_done_callback(aktif_silme_gorevleri.discard)
 
 async def otomatik_moderasyon(update, context):
-    if not update.message or not update.message.text: return
+    if not update.message or not update.message.chat: return
     chat_id = update.message.chat_id
     
-    # 🧠 YENİ GRUP HAFIZA KAYDI SİSTEMİ
-    if update.message.chat and update.message.chat.type in ['group', 'supergroup']:
-        if chat_id not in aktif_gruplar:
-            aktif_gruplar.add(chat_id)
-            grubu_kaydet(chat_id) # Yeni bir grupta konuşulursa anında veritabanına yazar!
+    # 🧠 GÜÇLENDİRİLMİŞ HAFIZA: Grubu anında hafızaya ve veritabanına ekle
+    if chat_id not in aktif_gruplar:
+        print(f"Yeni grup tespit edildi, hafızaya alınıyor: {chat_id}", flush=True)
+        aktif_gruplar.add(chat_id)  # RAM'deki set'i güncelle
+        grubu_kaydet(chat_id)       # Firebase'deki veritabanını güncelle
 
     user_id = update.message.from_user.id
     mesaj = update.message.text.lower()
