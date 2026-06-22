@@ -784,9 +784,9 @@ async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(mesaj, parse_mode='HTML')
 
-# ⏱️ HIZLANDIRILMIŞ GECE BEKÇİSİ
+# ⏱️ GECE BEKÇİSİ - SAAT GÜNCELLEMESİ
 async def gece_bekcisi(bot):
-    KAPANIS_SAATI = 1
+    KAPANIS_SAATI = 0  # Gece 12 (00:00) olarak ayarlandı
     ACILIS_SAATI = 8   
     while True:
         try:
