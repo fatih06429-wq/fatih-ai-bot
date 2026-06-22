@@ -786,7 +786,7 @@ async def iletisim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ⏱️ HIZLANDIRILMIŞ GECE BEKÇİSİ
 async def gece_bekcisi(bot):
-    KAPANIS_SAATI = 2  # Bugünlük saat 2'ye çekildi
+    KAPANIS_SAATI = 1
     ACILIS_SAATI = 8   
     while True:
         try:
